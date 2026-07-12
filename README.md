@@ -18,14 +18,14 @@ python decktool.py finishers 23718180     # non-combo finite game-enders, EDHREC
 Deck argument: Archidekt ID, Archidekt URL, or path to a local text list
 (`1x Card Name`, commander marked `*CMDR*`).
 
-Flags: `--show-infinite` (Paul avoids infinite combos, so they're collapsed by
+Flags: `--show-infinite` (collapsed by
 default), `--max-price N` (default $20), `--json` (raw report).
 
 ## Design notes
 
 - Infinite combos are detected via Spellbook `produces` features starting with
-  "Infinite"/"Near-infinite" and hidden by default — Paul's core preference.
-- Key learning: for most of Paul's decks, Commander Spellbook near-misses are
+  "Infinite"/"Near-infinite" and hidden by default
+- Key learning: Commander Spellbook near-misses are
   almost all infinite. The real gap is *finite finishers*, hence the
   `finishers` command: bucketed Scryfall searches (alt-win, drain, burn,
   overrun, extra combat, mass evasion) in the commander's color identity,
@@ -33,14 +33,6 @@ default), `--max-price N` (default $20), `--json` (raw report).
 - Archidekt categories with `includedInDeck: false` (Maybeboard etc.) are
   excluded from the mainboard.
 - Scryfall requires both User-Agent and Accept headers.
-
-## Paul's decks (Archidekt folder 163818)
-
-Ever Changing 23718180 · Mimeoplasm 14392139 · Brago 14179968 · Bruenor
-14422119 · Prosper 14181420 · Wilhelt 14424067 · Nekusar 13865790 · Obuun
-14427307 · Vadrick 14545722 · Anowon 14429038 · Siona 14423840 · Coven
-Counters 14402209 · Vorel Counters 14090810 · Rafiq 14179232 · Raggadragga
-14392356 · Varolz JANK 13904010
 
 ## TODO
 
