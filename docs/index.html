@@ -263,7 +263,7 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText) {
     const matched = cardObjs.filter(c => pat.test(oracleOf(c))).map(c => c.name);
     const cmdrHit = !!(cmdrCard && pat.test(oracleOf(cmdrCard)));
     const isGoal = goalThemes.has(theme);
-    const bar = isGoal ? 0 : (cmdrHit ? 2 : tax.min_cards);
+    const bar = isGoal ? 0 : (cmdrHit ? 1 : tax.min_cards);
     if (matched.length >= bar && (matched.length || isGoal)) {
       hits[theme] = { matched, cmdrHit, isGoal };
     } else if (isGoal) {

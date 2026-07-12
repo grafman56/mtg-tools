@@ -205,7 +205,7 @@ def detect_themes(cards, taxonomy, commanders=()):
             hits[theme] = (matched, cmdr_hit)
     ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
     ranked = [(t, m, ch) for t, (m, ch) in ranked
-              if len(m) >= (2 if ch else taxonomy["min_cards"])]
+              if len(m) >= (1 if ch else taxonomy["min_cards"])]
     ranked = ranked[:taxonomy["max_themes"] + 1]
 
     trib = taxonomy["tribal"]
