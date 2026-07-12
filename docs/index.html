@@ -93,8 +93,9 @@ Blood Artist
     </div>
     <button id="go">Analyze</button>
     <div id="status"></div>
-    <div class="hint">Data: Scryfall + Commander Spellbook, fetched live from your browser.
-      Nothing is uploaded anywhere else. Infinite combos are hidden by default on purpose.</div>
+    <div class="hint">Data: Scryfall (live) + a bundled snapshot of
+      <a href="https://commanderspellbook.com" target="_blank" style="color:var(--accent)">Commander Spellbook</a>'s combo database.
+      Nothing you paste is uploaded anywhere. Infinite combos are hidden by default on purpose.</div>
   </div>
   <div id="results" class="panel" style="display:none">
     <section id="health"></section>
@@ -172,31 +173,51 @@ function categorize(card) {
   return "Other";
 }
 
-async function findCombos(commanders, mainNames) {
-  const body = {
-    commanders: commanders.map(c => ({ card: c, quantity: 1 })),
-    main: mainNames.map(n => ({ card: n, quantity: 1 })),
-  };
-  const r = await fetch("https://backend.commanderspellbook.com/find-my-combos", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error("Commander Spellbook failed: " + r.status);
-  return (await r.json()).results;
+// Combo matching runs client-side against a snapshot of Commander
+// Spellbook's DB (combos.json, built by scripts/build_combo_db.py) — their
+// API only allows CORS from localhost/their own frontends, and this way the
+// combos feature also works offline once the page is cached.
+let COMBO_DB = null;
+async function loadComboDb(status) {
+  if (COMBO_DB) return COMBO_DB;
+  status("Loading combo database (one-time download)…");
+  const r = await fetch("combos.json");
+  if (!r.ok) throw new Error("couldn't load combos.json: " + r.status);
+  COMBO_DB = await r.json();
+  return COMBO_DB;
 }
 
-function comboInfo(combo, deckSet) {
-  const uses = combo.uses.map(u => u.card.name);
-  const produces = combo.produces.map(p => p.feature.name);
-  return {
-    id: combo.id, uses, produces,
-    missing: uses.filter(u => !deckSet.has(front(u).toLowerCase())),
-    infinite: produces.some(p => /^(near-)?infinite/i.test(p)),
-    ends: produces.some(p => GAME_ENDING.test(p)),
-    price: combo.prices && combo.prices.tcgplayer ? +combo.prices.tcgplayer : null,
-    popularity: combo.popularity || 0,
-    url: `https://commanderspellbook.com/combo/${combo.id}/`,
-  };
+function matchCombos(db, deckSet, commanderName, ident) {
+  const cmdr = commanderName ? front(commanderName).toLowerCase() : null;
+  const included = [], almost = [];
+  for (const e of db.combos) {
+    // With a declared commander, suggestions must fit its color identity.
+    if (cmdr && e.d && [...e.d].some(c => !ident.includes(c))) continue;
+    const missing = [];
+    let cmdrOk = true;
+    for (let i = 0; i < e.c.length; i++) {
+      const key = front(e.c[i]).toLowerCase();
+      // A card flagged must-be-commander only counts if it IS the declared
+      // commander; with no commander declared (open theme pile), anything goes.
+      if ((e.m || []).includes(i) && cmdr && key !== cmdr) { cmdrOk = false; break; }
+      if (!deckSet.has(key)) {
+        missing.push(e.c[i]);
+        if (missing.length > 1) break;
+      }
+    }
+    if (!cmdrOk || missing.length > 1) continue;
+    const produces = e.p;
+    const info = {
+      id: e.i, uses: e.c, produces, missing,
+      infinite: produces.some(p => /^(near-)?infinite/i.test(p)),
+      ends: produces.some(p => GAME_ENDING.test(p)),
+      price: e.$ != null ? e.$ : null,
+      popularity: e.o || 0,
+      url: `https://commanderspellbook.com/combo/${e.i}/`,
+    };
+    (missing.length ? almost : included).push(info);
+  }
+  return { included, almost };
 }
 
 function comboHtml(c) {
@@ -266,12 +287,10 @@ async function analyze() {
     $("health").innerHTML = h;
 
     // Combos
-    status("Asking Commander Spellbook for combos…");
-    const results = await findCombos(cmdrCard ? [cmdrCard.name] : [],
-                                     entries.map(e => e.name));
-    const included = results.included.map(c => comboInfo(c, deckSet));
-    const almost = results.almostIncluded.map(c => comboInfo(c, deckSet))
-                          .filter(c => c.missing.length === 1);
+    const db = await loadComboDb(status);
+    status("Matching combos…");
+    const { included, almost } = matchCombos(db, deckSet,
+                                             cmdrCard ? cmdrCard.name : null, ident);
 
     const incShow = included.filter(c => showInf || !c.infinite);
     const incHidden = included.length - incShow.length;
