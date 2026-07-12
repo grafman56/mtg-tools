@@ -11,6 +11,10 @@ Subcommands:
   finishers <deck>        Suggest non-combo, finite game-enders (Scryfall,
                           ranked by EDHREC popularity) in the deck's color
                           identity that aren't already in the list.
+  themes <deck>           Detect the deck's dominant themes (oracle-text
+                          taxonomy in docs/themes.json + tribal counting) and
+                          suggest payoffs/finishers keyed to those themes
+                          instead of generic color staples.
 
 Options:
   --show-infinite         Expand infinite combos instead of collapsing them.
@@ -138,6 +142,135 @@ def combo_summary(combo, deck_names):
         "bracket": combo.get("bracketTag"),
         "url": f"https://commanderspellbook.com/combo/{combo['id']}/",
     }
+
+
+# ---------------------------------------------------------------- themes
+
+def load_themes():
+    return json.loads((Path(__file__).parent / "docs" / "themes.json")
+                      .read_text(encoding="utf-8"))
+
+
+def deck_card_data(arg, commanders, main):
+    """Return per-card data [{name, qty, text, types, subtypes}] for the deck.
+    Archidekt decks carry oracle text already; text lists go through Scryfall."""
+    m = re.search(r"archidekt\.com/(?:api/)?decks/(\d+)", arg)
+    deck_id = m.group(1) if m else (arg if arg.isdigit() else None)
+    if deck_id:
+        raw = json.loads((CACHE_DIR / f"archidekt_{deck_id}.json")
+                         .read_text(encoding="utf-8"))
+        excluded = {c["name"] for c in raw.get("categories", [])
+                    if not c.get("includedInDeck", True)}
+        out = []
+        for entry in raw["cards"]:
+            cats = entry.get("categories") or []
+            if cats and cats[0] in excluded:
+                continue
+            oc = entry["card"]["oracleCard"]
+            out.append({"name": oc["name"], "qty": entry["quantity"],
+                        "text": oc.get("text") or "",
+                        "types": oc.get("types") or [],
+                        "subtypes": oc.get("subTypes") or []})
+        return out
+    # text decklist: fetch oracle data in batches from Scryfall
+    out = []
+    names = list(main) + commanders
+    for i in range(0, len(names), 75):
+        batch = names[i:i + 75]
+        resp = http_json("https://api.scryfall.com/cards/collection",
+                         {"identifiers": [{"name": n} for n in batch]})
+        for c in resp.get("data", []):
+            text = c.get("oracle_text") or "\n".join(
+                f.get("oracle_text", "") for f in c.get("card_faces", []))
+            tl = c.get("type_line", "")
+            types = re.split(r"\s+", tl.split("—")[0].strip())
+            subtypes = re.split(r"\s+", tl.split("—")[1].strip()) if "—" in tl else []
+            out.append({"name": c["name"], "qty": main.get(c["name"], 1),
+                        "text": text, "types": types, "subtypes": subtypes})
+    return out
+
+
+def detect_themes(cards, taxonomy):
+    """Return ([(theme, [card names])...] sorted desc, tribal info or None)."""
+    hits = {}
+    for theme, spec in taxonomy["themes"].items():
+        pat = re.compile("|".join(spec["detect"]), re.IGNORECASE)
+        matched = [c["name"] for c in cards if pat.search(c["text"])]
+        if matched:
+            hits[theme] = matched
+    ranked = sorted(hits.items(), key=lambda kv: -len(kv[1]))
+    ranked = [(t, m) for t, m in ranked if len(m) >= taxonomy["min_cards"]]
+    ranked = ranked[:taxonomy["max_themes"]]
+
+    trib = taxonomy["tribal"]
+    creature_subtypes = {}
+    n_creatures = 0
+    for c in cards:
+        if "Creature" not in c["types"]:
+            continue
+        n_creatures += 1
+        for s in c["subtypes"]:
+            creature_subtypes.setdefault(s, []).append(c["name"])
+    tribal = None
+    ubiq = trib.get("ubiquitous_types", {})
+    for top, members in sorted(creature_subtypes.items(), key=lambda kv: -len(kv[1])):
+        share_needed = ubiq.get(top, trib["min_share"])
+        if (len(members) >= trib["min_count"]
+                and len(members) >= share_needed * max(n_creatures, 1)):
+            tribal = (top, members)
+            break
+    return ranked, tribal
+
+
+def print_themes(deck_name, commanders, main, cards, max_price):
+    taxonomy = load_themes()
+    ranked, tribal = detect_themes(cards, taxonomy)
+    ident = commander_identity(commanders) if commanders else "WUBRG"
+    deck_names = {front(n).lower() for n in list(main) + commanders}
+    print(f"# Theme analysis — {deck_name} ({', '.join(commanders) or 'no commander'})\n")
+    if not ranked and not tribal:
+        print("No dominant theme detected — the pile is either too small or "
+              "too scattered. Themes need >= "
+              f"{taxonomy['min_cards']} matching cards.")
+        return
+    for theme, matched in ranked:
+        print(f"## {theme} — {len(matched)} cards")
+        print(f"   e.g. {', '.join(matched[:6])}")
+        queries = taxonomy["themes"][theme]["payoffs"]
+        _suggest(queries, ident, max_price, deck_names)
+    if tribal:
+        ttype, members = tribal
+        print(f"## {ttype} tribal — {len(members)} creatures")
+        print(f"   e.g. {', '.join(members[:6])}")
+        queries = [q.replace("{TYPE}", ttype) for q in taxonomy["tribal"]["payoffs"]]
+        _suggest(queries, ident, max_price, deck_names)
+
+
+def _suggest(queries, ident, max_price, deck_names, limit=8):
+    seen, shown = set(), 0
+    for q in queries:
+        full = f"({q}) id<={ident} legal:commander usd<={max_price:g}"
+        for c in scryfall_search(full):
+            key = front(c["name"]).lower()
+            if key in deck_names or key in seen:
+                continue
+            seen.add(key)
+            price = c.get("prices", {}).get("usd")
+            text = (c.get("oracle_text")
+                    or " // ".join(f.get("oracle_text", "")
+                                   for f in c.get("card_faces", []))).replace("\n", " ")
+            print(f"   + {c['name']} ({c.get('mana_cost', '?')})"
+                  f"{' $' + price if price else ''}")
+            print(f"       {text[:140]}")
+            shown += 1
+            if shown >= limit:
+                print()
+                return
+    print()
+
+
+def front(name):
+    return name.split("//")[0].strip()
 
 
 # ---------------------------------------------------------------- finishers
@@ -295,7 +428,8 @@ def print_report(rep, show_infinite=False, max_price=20.0):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["fetch", "combos", "wincons", "finishers"])
+    ap.add_argument("command",
+                    choices=["fetch", "combos", "wincons", "finishers", "themes"])
     ap.add_argument("deck", help="Archidekt ID/URL or path to text decklist")
     ap.add_argument("--show-infinite", action="store_true")
     ap.add_argument("--max-price", type=float, default=20.0)
@@ -313,6 +447,10 @@ def main():
 
     if args.command == "finishers":
         print_finishers(name, commanders, main_cards, args.max_price)
+        return
+    if args.command == "themes":
+        cards = deck_card_data(args.deck, commanders, main_cards)
+        print_themes(name, commanders, main_cards, cards, args.max_price)
         return
 
     rep = build_report(name, commanders, main_cards,

@@ -1,0 +1,236 @@
+{
+  "comment": "Theme taxonomy for Deck Forge. 'detect' = case-insensitive regexes run against each card's oracle text (or type line where noted); a card scoring >=1 counts toward the theme. 'payoffs' = Scryfall queries for cards that reward the theme (engines and finishers), run with identity/budget/legality filters appended. Shared by decktool.py and the web UI.",
+  "min_cards": 5,
+  "max_themes": 3,
+  "themes": {
+    "Sacrifice / aristocrats": {
+      "detect": [
+        "sacrifice a creature",
+        "sacrifice another creature",
+        "whenever (a|another) creature( you control)? dies",
+        "when(ever)? this creature dies",
+        "dies, (create|draw|each|put|return)",
+        "sacrifice a permanent"
+      ],
+      "payoffs": [
+        "o:/whenever (a|another) creature( you control)? dies/ (o:\"loses\" or o:\"damage\" or o:\"drain\")",
+        "o:\"sacrifice a creature:\" -o:\"activate only\"",
+        "o:/whenever you sacrifice/"
+      ]
+    },
+    "Blink / ETB value": {
+      "detect": [
+        "exile .{0,40}, then return (it|that card|them) to the battlefield",
+        "return (it|them) to the battlefield",
+        "when(ever)? .{0,30} enters( the battlefield)?, (you may )?(draw|create|return|search|destroy|exile|scry)",
+        "enters the battlefield, "
+      ],
+      "payoffs": [
+        "o:/exile .{0,30}creature.{0,40} return .{0,20} battlefield/ (t:instant or t:creature or t:enchantment or t:artifact)",
+        "o:/whenever (a|another) creature( you control)? enters/ (o:damage or o:loses or o:drain or o:\"+1/+1\")",
+        "o:\"enters, \" o:\"each opponent\""
+      ]
+    },
+    "Treasure / artifact tokens": {
+      "detect": [
+        "create .{0,30}treasure token",
+        "treasure tokens?",
+        "artifact token"
+      ],
+      "payoffs": [
+        "o:treasure (o:\"you win\" or o:/whenever .{0,20}(artifact|treasure).{0,20} (enters|leaves|is put)/ )",
+        "o:/whenever (an|another) artifact (you control )?enters/ (o:damage or o:draw or o:loses)",
+        "o:/sacrifice an artifact/ (o:damage or o:draw)"
+      ]
+    },
+    "Token swarm / go wide": {
+      "detect": [
+        "create (one|two|three|x|that many).{0,40}creature tokens?",
+        "creature tokens? (with|are|you control)",
+        "populate"
+      ],
+      "payoffs": [
+        "o:/creatures you control get \\+/ (o:trample or o:flying or o:\"double strike\" or o:menace)",
+        "o:/whenever (a|another) creature( you control)? enters/ (o:damage or o:loses)",
+        "o:/for each creature you control/ (o:damage or o:loses or o:token)"
+      ]
+    },
+    "+1/+1 counters / proliferate": {
+      "detect": [
+        "put (a|one|two|three|x|that many) \\+1/\\+1 counters?",
+        "\\+1/\\+1 counter (on|for) each",
+        "proliferate",
+        "enters with .{0,20}\\+1/\\+1 counters?"
+      ],
+      "payoffs": [
+        "o:proliferate (t:creature or t:instant or t:sorcery or t:artifact)",
+        "o:/\\+1\\/\\+1 counter/ (o:trample or o:\"can't be blocked\" or o:flying or o:/each opponent/)",
+        "o:/double the number of .{0,20}counters/"
+      ]
+    },
+    "Graveyard / reanimator": {
+      "detect": [
+        "return .{0,40}creature card.{0,20} from (your|a) graveyard to the battlefield",
+        "from (your|a) graveyard to (your hand|the battlefield)",
+        "mill (a|one|two|three|x|that many)? ?cards?",
+        "put .{0,30} cards? .{0,20}into (your|their) graveyard",
+        "escape|flashback|unearth|delve|dredge|disturb|embalm|eternalize"
+      ],
+      "payoffs": [
+        "o:/return .{0,20}creature card.{0,30}graveyard to the battlefield/ (t:sorcery or t:enchantment) cmc<=6",
+        "o:/whenever .{0,30}(leaves|is put into) (your|a) graveyard/",
+        "o:/creature card in (your|each) graveyard/ (o:damage or o:loses or o:\"+1/+1\")"
+      ]
+    },
+    "Wheels / draw punishment": {
+      "detect": [
+        "each player (discards|draws)",
+        "discards? (their|his or her) hand",
+        "draws? (seven|that many) cards",
+        "whenever an opponent draws a card"
+      ],
+      "payoffs": [
+        "o:/whenever an opponent draws a card/ (o:damage or o:loses)",
+        "o:/each player discards .{0,20}hand/ o:/draws seven/",
+        "o:/whenever (a player|an opponent) discards/ (o:damage or o:loses)"
+      ]
+    },
+    "Clones / copying": {
+      "detect": [
+        "(as )?a copy of (any|another|target|that|a) (creature|permanent|spell)",
+        "you may have .{0,30} enter (the battlefield )?as a copy",
+        "create a token that's a copy",
+        "copy (target|that) (spell|ability)"
+      ],
+      "payoffs": [
+        "o:/create a token that's a copy of/ (t:artifact or t:enchantment or t:creature)",
+        "o:/you may have .{0,30} enter .{0,15}as a copy/",
+        "o:/whenever .{0,30}one or more tokens/ (o:damage or o:draw or o:loses)"
+      ]
+    },
+    "Spellslinger": {
+      "detect": [
+        "whenever you cast (an instant|a sorcery|an instant or sorcery|a noncreature) spell",
+        "instant and sorcery (spells|cards)",
+        "prowess|magecraft|storm"
+      ],
+      "payoffs": [
+        "o:/whenever you cast (an instant|a sorcery|an instant or sorcery|a noncreature) spell/ (o:damage or o:copy or o:token)",
+        "o:/instant (and|or) sorcery cards? in your graveyard/ (o:damage or o:power)",
+        "o:magecraft"
+      ]
+    },
+    "Artifacts matter": {
+      "detect": [
+        "artifacts? you control",
+        "whenever (an|another) artifact",
+        "affinity for artifacts|metalcraft|improvise",
+        "search your library for an artifact"
+      ],
+      "payoffs": [
+        "o:/artifacts? you control/ (o:damage or o:\"you win\" or o:/gets \\+.{0,10} for each artifact/)",
+        "o:/whenever (an|another) artifact (you control )?enters/ (o:damage or o:draw)",
+        "o:metalcraft (o:damage or o:\"can't be blocked\")"
+      ]
+    },
+    "Lifegain": {
+      "detect": [
+        "you gain (\\d+|x|that much) life",
+        "whenever you gain life",
+        "lifelink"
+      ],
+      "payoffs": [
+        "o:/whenever you gain life/ (o:counter or o:damage or o:loses or o:draw)",
+        "o:/you have (\\d+) or more life/ (o:win or o:\"can't lose\")",
+        "o:/life total becomes/ or o:/pay half your life/"
+      ]
+    },
+    "Mill opponents": {
+      "detect": [
+        "(target player|each opponent) mills",
+        "cards? (of|from) (their|target player's) library into (their|his or her) graveyard",
+        "library into (their|its owner's) graveyard"
+      ],
+      "payoffs": [
+        "o:/each opponent mills/ (t:creature or t:enchantment)",
+        "o:/whenever .{0,30}opponent.{0,10} mills?/",
+        "o:/library has no cards|no cards in (their|its owner's) library/"
+      ]
+    },
+    "Landfall / lands matter": {
+      "detect": [
+        "landfall",
+        "whenever a land (you control )?enters",
+        "play (an additional|two additional) lands?",
+        "return .{0,30}land cards? from your graveyard"
+      ],
+      "payoffs": [
+        "o:landfall (o:damage or o:token or o:\"+1/+1\")",
+        "o:/whenever a land (you control )?enters/ (o:damage or o:draw or o:token)",
+        "o:/lands? you control/ (o:/gets \\+.{0,12} for each land/ or o:damage)"
+      ]
+    },
+    "Opponent discard": {
+      "detect": [
+        "(target|each) (player|opponent) discards",
+        "whenever an opponent discards",
+        "madness"
+      ],
+      "payoffs": [
+        "o:/whenever (a player|an opponent) discards a card/ (o:damage or o:loses)",
+        "o:/each opponent discards/ (t:creature or t:enchantment)",
+        "o:/has no cards in hand/ (o:damage or o:loses or o:win)"
+      ]
+    },
+    "Equipment": {
+      "detect": [
+        "equipped creature",
+        "equip \\{",
+        "attach .{0,30}equipment"
+      ],
+      "payoffs": [
+        "o:/equipped creature gets/ (o:\"double strike\" or o:annihilator or o:/\\+[3-9]/)",
+        "o:/whenever equipped creature deals combat damage to a player/",
+        "o:/attach .{0,30}equipment/ (t:creature or t:sorcery)"
+      ]
+    },
+    "Auras / enchanted creatures": {
+      "detect": [
+        "enchant creature",
+        "enchanted creature",
+        "whenever you cast an aura",
+        "aura spell"
+      ],
+      "payoffs": [
+        "o:/whenever you cast an (aura|enchantment)( spell)?/ (o:draw or o:token)",
+        "o:/enchanted creature gets/ (o:\"double strike\" or o:trample o:lifelink or o:/\\+[3-9]/)",
+        "o:/aura/ o:/attached/ (o:\"can't be blocked\" or o:annihilator)",
+        "o:totem armor"
+      ]
+    },
+    "Enchantments matter": {
+      "detect": [
+        "constellation",
+        "whenever (an|another) enchantment",
+        "enchantments? you control",
+        "search your library for an enchantment"
+      ],
+      "payoffs": [
+        "o:constellation (o:damage or o:draw or o:loses)",
+        "o:/enchantments? you control/ (o:/gets \\+.{0,12} for each enchantment/ or o:damage)",
+        "o:/whenever you cast an enchantment/"
+      ]
+    }
+  },
+  "tribal": {
+    "comment": "Dynamic: if min_share of creatures share a subtype, that type is a theme. Payoff query templates use {TYPE}.",
+    "min_share": 0.4,
+    "min_count": 8,
+    "ubiquitous_types": { "Human": 0.6, "Wizard": 0.6, "Soldier": 0.55, "Elemental": 0.55, "Spirit": 0.55 },
+    "payoffs": [
+      "t:{TYPE} (o:/other {TYPE}s? (you control )?get/ or o:/{TYPE}s? you control get/)",
+      "o:/whenever (a|another) {TYPE}( you control)?( enters| dies| attacks)/",
+      "o:/for each {TYPE}/ (o:damage or o:loses or o:token)"
+    ]
+  }
+}

@@ -99,6 +99,8 @@ Blood Artist
   </div>
   <div id="results" class="panel" style="display:none">
     <section id="health"></section>
+    <section id="themes"></section>
+    <section id="synergy"></section>
     <section id="combos"></section>
     <section id="almost"></section>
     <section id="finishers"></section>
@@ -144,7 +146,7 @@ async function scryfallCollection(names, status) {
     status(`Looking up cards on Scryfall (${i + 1}–${Math.min(i + 75, names.length)} of ${names.length})…`);
     const r = await fetch("https://api.scryfall.com/cards/collection", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifiers: names.slice(i, i + 75).map(n => ({ name: n })) }),
+      body: JSON.stringify({ identifiers: names.slice(i, i + 75).map(n => ({ name: front(n) })) }),
     });
     if (!r.ok) throw new Error("Scryfall lookup failed: " + r.status);
     const d = await r.json();
@@ -228,6 +230,110 @@ function comboHtml(c) {
     <div class="produces">→ ${esc(c.produces.join("; "))}</div></div>`;
 }
 
+// ------------------------------------------------------------- themes
+let THEMES = null;
+async function loadThemes() {
+  if (THEMES) return THEMES;
+  const r = await fetch("themes.json");
+  if (!r.ok) throw new Error("couldn't load themes.json: " + r.status);
+  THEMES = await r.json();
+  return THEMES;
+}
+
+function typeParts(card) {
+  const tl = (card.type_line || "").split("//")[0];
+  const [types, subs] = tl.split("—").map(s => (s || "").trim());
+  return { types: types ? types.split(/\s+/) : [],
+           subtypes: subs ? subs.split(/\s+/) : [] };
+}
+
+function detectThemesJs(cardObjs, tax) {
+  const hits = {};
+  for (const [theme, spec] of Object.entries(tax.themes)) {
+    const pat = new RegExp(spec.detect.join("|"), "i");
+    const matched = cardObjs.filter(c => pat.test(oracleOf(c))).map(c => c.name);
+    if (matched.length >= tax.min_cards) hits[theme] = matched;
+  }
+  const ranked = Object.entries(hits).sort((a, b) => b[1].length - a[1].length)
+                       .slice(0, tax.max_themes);
+  // Tribal: most common creature subtype, with a higher bar for types that
+  // appear everywhere (Humans, Wizards...).
+  const bySub = {};
+  let nCreatures = 0;
+  for (const c of cardObjs) {
+    const { types, subtypes } = typeParts(c);
+    if (!types.includes("Creature")) continue;
+    nCreatures++;
+    for (const s of subtypes) (bySub[s] = bySub[s] || []).push(c.name);
+  }
+  let tribal = null;
+  const ubiq = tax.tribal.ubiquitous_types || {};
+  for (const [type, members] of Object.entries(bySub).sort((a, b) => b[1].length - a[1].length)) {
+    const need = ubiq[type] || tax.tribal.min_share;
+    if (members.length >= tax.tribal.min_count && members.length >= need * Math.max(nCreatures, 1)) {
+      tribal = [type, members];
+      break;
+    }
+  }
+  return { ranked, tribal };
+}
+
+async function themeSuggestions(queries, ident, maxPrice, deckSet, limit = 6) {
+  const seen = new Set(), out = [];
+  for (const q of queries) {
+    const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
+    for (const c of cards) {
+      const key = front(c.name).toLowerCase();
+      if (deckSet.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      out.push(c);
+      if (out.length >= limit) return out;
+    }
+    await sleep(120);
+  }
+  return out;
+}
+
+function finisherCardHtml(c) {
+  const text = oracleOf(c).split("\n").find(l => GAME_ENDING.test(l))
+               || oracleOf(c).split("\n")[0] || "";
+  const price = c.prices && c.prices.usd ? ` · $${c.prices.usd}` : "";
+  return `<div class="finisher"><div class="name"><a href="${c.scryfall_uri}" target="_blank">${esc(c.name)}</a><br>
+          <span class="text">${esc(c.mana_cost || "")}${price}</span></div>
+          <div class="text">${esc(text.slice(0, 220))}</div></div>`;
+}
+
+// ------------------------------------------------------------- EDHREC
+function edhrecSlug(name) {
+  return front(name).toLowerCase()
+    .replace(/["'’.,]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+async function edhrecSynergy(commanderName, deckSet) {
+  try {
+    const r = await fetch(`https://json.edhrec.com/pages/commanders/${edhrecSlug(commanderName)}.json`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const lists = (((j.container || {}).json_dict || {}).cardlists) || [];
+    const pick = re => lists.find(l => re.test(l.header || ""));
+    const high = pick(/high synergy/i), top = pick(/^top cards/i);
+    if (!high && !top) return null;
+    const views = [...((high || {}).cardviews || []), ...((top || {}).cardviews || [])];
+    const seen = new Set(), fresh = [];
+    let owned = 0;
+    for (const cv of views) {
+      const key = front(cv.name).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (deckSet.has(key)) owned++;
+      else fresh.push(cv);
+    }
+    return { fresh: fresh.slice(0, 12), owned, total: seen.size };
+  } catch (e) {
+    return null; // EDHREC is a bonus signal; never fail the run over it
+  }
+}
+
 async function scryfallSearch(q, status) {
   const r = await fetch("https://api.scryfall.com/cards/search?order=edhrec&unique=cards&q="
                         + encodeURIComponent(q));
@@ -285,6 +391,55 @@ async function analyze() {
     h += `<div class="stat"><div>Everything else</div><b>${counts.Other}</b></div></div>`;
     if (scale < 1) h += `<div class="hint">Targets scaled to your ${total}-card pile; a full deck wants ~${BASELINE.Lands} lands, ${BASELINE.Ramp} ramp, ${BASELINE["Card draw"]} draw, ${BASELINE.Interaction} interaction.</div>`;
     $("health").innerHTML = h;
+
+    // Themes — the pile's own mechanics, then suggestions keyed to them
+    status("Detecting themes…");
+    const tax = await loadThemes();
+    const cardObjs = entries.map(e => found.get(front(e.name).toLowerCase()))
+                            .filter(Boolean);
+    const { ranked: themesRanked, tribal } = detectThemesJs(cardObjs, tax);
+    let th = `<h2>Themes in this pile — suggestions that fit what it's doing</h2>`;
+    if (!themesRanked.length && !tribal) {
+      th += `<div class="hint">No dominant theme yet (needs ${tax.min_cards}+ cards pulling the same direction) — the finishers below are generic to your colors.</div>`;
+      $("themes").innerHTML = th;
+    } else {
+      $("themes").innerHTML = th;
+      const jobs = themesRanked.map(([t, m]) => [t, m, tax.themes[t].payoffs]);
+      if (tribal) {
+        jobs.push([`${tribal[0]} tribal`, tribal[1],
+                   tax.tribal.payoffs.map(q => q.split("{TYPE}").join(tribal[0]))]);
+      }
+      for (const [theme, matched, queries] of jobs) {
+        status(`Theme payoffs: ${theme}…`);
+        const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet);
+        th += `<div class="pill-row"><b>${esc(theme)}</b>
+               <span class="pill">${matched.length} cards, e.g. ${esc(matched.slice(0, 4).join(", "))}</span></div>`;
+        th += sugg.length ? sugg.map(finisherCardHtml).join("")
+                          : `<div class="hint">nothing new in identity/budget</div>`;
+        $("themes").innerHTML = th;
+      }
+    }
+
+    // EDHREC synergy — cards overrepresented for THIS commander
+    if (cmdrCard) {
+      status("Checking EDHREC synergy…");
+      const syn = await edhrecSynergy(cmdrCard.name, deckSet);
+      if (syn) {
+        let sh = `<h2>EDHREC synergy picks for ${esc(cmdrCard.name)}</h2>
+                  <div class="hint">"Synergy" = how much more often the card shows up in this commander's decks than in other decks of these colors — the opposite of a generic staple. You already run ${syn.owned} of the ${syn.total} top synergy/top cards.</div>`;
+        for (const cv of syn.fresh) {
+          const pct = cv.synergy != null
+            ? ` <span class="pill">${cv.synergy >= 0 ? "+" : ""}${Math.round(cv.synergy * 100)}% synergy</span>` : "";
+          sh += `<div class="combo"><a href="https://edhrec.com${cv.url || ""}" target="_blank">${esc(cv.name)}</a>${pct}</div>`;
+        }
+        if (!syn.fresh.length) sh += `<div class="hint">Nothing to add — your list already covers EDHREC's synergy picks.</div>`;
+        $("synergy").innerHTML = sh;
+      } else {
+        $("synergy").innerHTML = "";
+      }
+    } else {
+      $("synergy").innerHTML = "";
+    }
 
     // Combos
     const db = await loadComboDb(status);

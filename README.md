@@ -56,3 +56,14 @@ hidden by default.
 Run locally: `python -m http.server 8420 --directory docs` then open
 http://localhost:8420 — or just double-click the file. To share with a
 friend: send them the file, or enable GitHub Pages on this repo.
+
+## Theme-aware suggestions (v0.3)
+
+`python decktool.py themes <deck>` and the web UI's "Themes in this pile"
+section detect the deck's dominant mechanics via the oracle-text taxonomy in
+docs/themes.json (17 themes + dynamic tribal detection with a higher bar for
+ubiquitous types like Human), then suggest payoffs keyed to those mechanics
+instead of generic color staples. Validated against all 15 real decks —
+each detected its known archetype. The web UI also shows EDHREC synergy
+picks for the commander (json.edhrec.com is CORS-open; synergy = played
+far more with this commander than elsewhere).
