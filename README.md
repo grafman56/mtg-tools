@@ -67,3 +67,15 @@ instead of generic color staples. Validated against all 15 real decks —
 each detected its known archetype. The web UI also shows EDHREC synergy
 picks for the commander (json.edhrec.com is CORS-open; synergy = played
 far more with this commander than elsewhere).
+
+## v0.4: commander-weighted themes, intersections, goal box
+
+- The commander's own oracle text is the build-around signal: themes it
+  matches are always surfaced (support bar drops to 2 cards) and tagged.
+- New themes: Theft / mind control, Exile / impulse draw.
+- themes.json "intersections": when two themes co-occur (clones+sac,
+  theft+sac, theft+clones, treasure+sac, exile+treasure), cards serving both
+  mechanics are suggested first.
+- Web UI goal box: describe the gameplan in words ("steal creatures,
+  sacrifice them, become them") — keyword map in themes.json "goals" forces
+  those themes even in an empty pile. Plain keyword matching, not NLP.

@@ -190,17 +190,23 @@ def deck_card_data(arg, commanders, main):
     return out
 
 
-def detect_themes(cards, taxonomy):
-    """Return ([(theme, [card names])...] sorted desc, tribal info or None)."""
+def detect_themes(cards, taxonomy, commanders=()):
+    """Return ([(theme, [card names], is_cmdr_theme)...], tribal info or None).
+    Themes the commander's own text matches are the build-around signal and
+    are always surfaced (with a lower support threshold)."""
+    cmdr_keys = {front(c).lower() for c in commanders}
     hits = {}
     for theme, spec in taxonomy["themes"].items():
         pat = re.compile("|".join(spec["detect"]), re.IGNORECASE)
         matched = [c["name"] for c in cards if pat.search(c["text"])]
+        cmdr_hit = any(front(c["name"]).lower() in cmdr_keys
+                       and pat.search(c["text"]) for c in cards)
         if matched:
-            hits[theme] = matched
-    ranked = sorted(hits.items(), key=lambda kv: -len(kv[1]))
-    ranked = [(t, m) for t, m in ranked if len(m) >= taxonomy["min_cards"]]
-    ranked = ranked[:taxonomy["max_themes"]]
+            hits[theme] = (matched, cmdr_hit)
+    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
+    ranked = [(t, m, ch) for t, (m, ch) in ranked
+              if len(m) >= (2 if ch else taxonomy["min_cards"])]
+    ranked = ranked[:taxonomy["max_themes"] + 1]
 
     trib = taxonomy["tribal"]
     creature_subtypes = {}
@@ -224,7 +230,7 @@ def detect_themes(cards, taxonomy):
 
 def print_themes(deck_name, commanders, main, cards, max_price):
     taxonomy = load_themes()
-    ranked, tribal = detect_themes(cards, taxonomy)
+    ranked, tribal = detect_themes(cards, taxonomy, commanders)
     ident = commander_identity(commanders) if commanders else "WUBRG"
     deck_names = {front(n).lower() for n in list(main) + commanders}
     print(f"# Theme analysis — {deck_name} ({', '.join(commanders) or 'no commander'})\n")
@@ -233,8 +239,15 @@ def print_themes(deck_name, commanders, main, cards, max_price):
               "too scattered. Themes need >= "
               f"{taxonomy['min_cards']} matching cards.")
         return
-    for theme, matched in ranked:
-        print(f"## {theme} — {len(matched)} cards")
+    active = {t for t, _, _ in ranked}
+    for pair, spec in taxonomy.get("intersections", {}).items():
+        a, b = pair.split("|")
+        if a in active and b in active:
+            print(f"## {spec['label']} (both themes present)")
+            _suggest(spec["payoffs"], ident, max_price, deck_names)
+    for theme, matched, cmdr_hit in ranked:
+        flag = " [commander theme]" if cmdr_hit else ""
+        print(f"## {theme}{flag} — {len(matched)} cards")
         print(f"   e.g. {', '.join(matched[:6])}")
         queries = taxonomy["themes"][theme]["payoffs"]
         _suggest(queries, ident, max_price, deck_names)

@@ -22,8 +22,8 @@ for label, deck_id in DECKS.items():
     try:
         name, commanders, main = decktool.fetch_archidekt(str(deck_id))
         cards = decktool.deck_card_data(str(deck_id), commanders, main)
-        ranked, tribal = decktool.detect_themes(cards, taxonomy)
-        parts = [f"{t} ({len(m)}: {', '.join(m[:4])}...)" for t, m in ranked]
+        ranked, tribal = decktool.detect_themes(cards, taxonomy, commanders)
+        parts = [f"{'*' if ch else ''}{t} ({len(m)})" for t, m, ch in ranked]
         if tribal:
             parts.append(f"{tribal[0]} tribal ({len(tribal[1])})")
         print(f"{label} [{', '.join(commanders)}]:")

@@ -97,15 +97,44 @@
     },
     "Clones / copying": {
       "detect": [
-        "(as )?a copy of (any|another|target|that|a) (creature|permanent|spell)",
+        "(as )?a copy of (any|another|target|that|a|the)\\b",
         "you may have .{0,30} enter (the battlefield )?as a copy",
         "create a token that's a copy",
         "copy (target|that) (spell|ability)"
       ],
       "payoffs": [
-        "o:/create a token that's a copy of/ (t:artifact or t:enchantment or t:creature)",
+        "o:/copy of (target|a|another|that) creature/ (t:creature or t:sorcery or t:instant)",
         "o:/you may have .{0,30} enter .{0,15}as a copy/",
         "o:/whenever .{0,30}one or more tokens/ (o:damage or o:draw or o:loses)"
+      ]
+    },
+    "Theft / mind control": {
+      "detect": [
+        "gain control of (target|that|all|each|another|an opponent's)",
+        "gains? control of (it|them)",
+        "exchange control",
+        "controls? (that|target) creature"
+      ],
+      "payoffs": [
+        "o:/gain control of target creature/ (t:enchantment or t:creature) -o:\"until end of turn\"",
+        "o:/gain control of target creature until end of turn/ (o:haste or o:sacrifice)",
+        "o:/gain control of (all|each)/",
+        "o:/whenever .{0,40}an opponent (owns|controls)/ (o:damage or o:draw)"
+      ]
+    },
+    "Exile / impulse draw": {
+      "detect": [
+        "exile the top (card|two cards|three cards|x cards) of your library",
+        "you may (play|cast) (that card|it|them|those cards)",
+        "cast (a spell|spells|it|them)? ?from exile",
+        "plot|foretell|suspend \\d|madness \\{|adventure",
+        "in exile, you may"
+      ],
+      "payoffs": [
+        "o:/cast .{0,25}from exile/ (o:damage or o:treasure or o:copy or o:draw or o:\"loses\")",
+        "o:/whenever you cast a spell from anywhere other than your hand/",
+        "o:/exile the top .{0,20}librar.{0,20}(play|cast)/ (t:enchantment or t:creature or t:artifact)",
+        "o:/spells? you cast from exile/"
       ]
     },
     "Spellslinger": {
@@ -199,7 +228,8 @@
         "enchant creature",
         "enchanted creature",
         "whenever you cast an aura",
-        "aura spell"
+        "aura spell",
+        "an aura (card|you control)"
       ],
       "payoffs": [
         "o:/whenever you cast an (aura|enchantment)( spell)?/ (o:draw or o:token)",
@@ -221,6 +251,68 @@
         "o:/whenever you cast an enchantment/"
       ]
     }
+  },
+  "intersections": {
+    "Clones / copying|Sacrifice / aristocrats": {
+      "label": "Copy creatures, profit when they die",
+      "payoffs": [
+        "o:/create a token that's a copy of (target|a|another) creature/ (o:sacrifice or o:haste or t:creature)",
+        "o:/whenever (a|another) (creature|nontoken creature) you control dies/ o:/(create|return|draw)/",
+        "o:/when this creature dies/ o:/copy/"
+      ]
+    },
+    "Theft / mind control|Sacrifice / aristocrats": {
+      "label": "Steal it, then sacrifice it",
+      "payoffs": [
+        "o:/gain control of target creature until end of turn/ (o:haste or o:sacrifice)",
+        "o:\"sacrifice a creature:\" -o:\"activate only\" (t:creature or t:artifact)",
+        "o:/sacrifice a creature/ o:/gain control/"
+      ]
+    },
+    "Theft / mind control|Clones / copying": {
+      "label": "Steal or become their best creature",
+      "payoffs": [
+        "o:/copy of (target|that) creature (that player|an opponent) controls/",
+        "o:/gain control of target creature/ o:/copy/",
+        "o:/enter .{0,20}as a copy of .{0,20}opponent/"
+      ]
+    },
+    "Treasure / artifact tokens|Sacrifice / aristocrats": {
+      "label": "Sacrifice artifacts for value",
+      "payoffs": [
+        "o:/whenever you sacrifice an artifact/",
+        "o:/sacrifice an artifact:/ (o:damage or o:draw)",
+        "o:/whenever (an|another) artifact .{0,20}(you control )?(is put into a graveyard|leaves the battlefield)/"
+      ]
+    },
+    "Exile / impulse draw|Treasure / artifact tokens": {
+      "label": "Cast from exile, get paid",
+      "payoffs": [
+        "o:/cast .{0,25}from exile/ (o:treasure or o:damage or o:draw)",
+        "o:/whenever you cast a spell from anywhere other than your hand/"
+      ]
+    }
+  },
+  "goals": {
+    "Theft / mind control": ["steal", "gain control", "mind control", "take their", "act of treason"],
+    "Sacrifice / aristocrats": ["sacrifice", "sac ", "aristocrat", "death trigger", "dies"],
+    "Clones / copying": ["clone", "copy", "become", "shapeshift"],
+    "Exile / impulse draw": ["exile", "impulse", "cast from exile", "plot", "foretell"],
+    "Blink / ETB value": ["blink", "flicker", "etb"],
+    "Treasure / artifact tokens": ["treasure"],
+    "Token swarm / go wide": ["token", "go wide", "swarm"],
+    "+1/+1 counters / proliferate": ["counter", "proliferate"],
+    "Graveyard / reanimator": ["graveyard", "reanimate", "recursion", "self-mill"],
+    "Wheels / draw punishment": ["wheel", "draw punishment", "forced draw"],
+    "Spellslinger": ["spellslinger", "instant", "sorcery", "storm"],
+    "Artifacts matter": ["artifact"],
+    "Lifegain": ["lifegain", "gain life"],
+    "Mill opponents": ["mill"],
+    "Landfall / lands matter": ["landfall", "lands matter", "ramp big"],
+    "Opponent discard": ["discard"],
+    "Equipment": ["equipment", "voltron", "swords"],
+    "Auras / enchanted creatures": ["aura", "enchant creature"],
+    "Enchantments matter": ["enchantment", "constellation"]
   },
   "tribal": {
     "comment": "Dynamic: if min_share of creatures share a subtype, that type is a theme. Payoff query templates use {TYPE}.",

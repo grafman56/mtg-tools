@@ -85,6 +85,8 @@ Blood Artist
 ..."></textarea>
     <label>Commander (optional — leave blank for a theme pile; colors are inferred)</label>
     <input type="text" id="commander" placeholder="The Ever-Changing 'Dane">
+    <label>What should the deck do? (optional — forces themes even if the pile doesn't show them yet)</label>
+    <input type="text" id="goal" placeholder="steal creatures, sacrifice them, become them">
     <div class="row">
       <div><label>Max card price ($)</label><input type="number" id="maxprice" value="20"></div>
       <div><label>&nbsp;</label>
@@ -247,15 +249,32 @@ function typeParts(card) {
            subtypes: subs ? subs.split(/\s+/) : [] };
 }
 
-function detectThemesJs(cardObjs, tax) {
+function detectThemesJs(cardObjs, tax, cmdrCard, goalText) {
+  // Themes the user typed as a goal are forced in; themes the commander's own
+  // text matches are the build-around signal and get a lower support bar.
+  const goal = (goalText || "").toLowerCase();
+  const goalThemes = new Set();
+  for (const [theme, words] of Object.entries(tax.goals || {})) {
+    if (goal && words.some(w => goal.includes(w))) goalThemes.add(theme);
+  }
   const hits = {};
   for (const [theme, spec] of Object.entries(tax.themes)) {
     const pat = new RegExp(spec.detect.join("|"), "i");
     const matched = cardObjs.filter(c => pat.test(oracleOf(c))).map(c => c.name);
-    if (matched.length >= tax.min_cards) hits[theme] = matched;
+    const cmdrHit = !!(cmdrCard && pat.test(oracleOf(cmdrCard)));
+    const isGoal = goalThemes.has(theme);
+    const bar = isGoal ? 0 : (cmdrHit ? 2 : tax.min_cards);
+    if (matched.length >= bar && (matched.length || isGoal)) {
+      hits[theme] = { matched, cmdrHit, isGoal };
+    } else if (isGoal) {
+      hits[theme] = { matched: [], cmdrHit, isGoal };
+    }
   }
-  const ranked = Object.entries(hits).sort((a, b) => b[1].length - a[1].length)
-                       .slice(0, tax.max_themes);
+  const ranked = Object.entries(hits)
+    .sort((a, b) => (b[1].isGoal - a[1].isGoal) || (b[1].cmdrHit - a[1].cmdrHit)
+                    || (b[1].matched.length - a[1].matched.length))
+    .slice(0, tax.max_themes + 2)
+    .map(([theme, h]) => [theme, h.matched, h.cmdrHit, h.isGoal]);
   // Tribal: most common creature subtype, with a higher bar for types that
   // appear everywhere (Humans, Wizards...).
   const bySub = {};
@@ -397,23 +416,42 @@ async function analyze() {
     const tax = await loadThemes();
     const cardObjs = entries.map(e => found.get(front(e.name).toLowerCase()))
                             .filter(Boolean);
-    const { ranked: themesRanked, tribal } = detectThemesJs(cardObjs, tax);
+    const goalText = $("goal").value.trim();
+    const { ranked: themesRanked, tribal } =
+      detectThemesJs(cardObjs, tax, cmdrCard, goalText);
     let th = `<h2>Themes in this pile — suggestions that fit what it's doing</h2>`;
     if (!themesRanked.length && !tribal) {
       th += `<div class="hint">No dominant theme yet (needs ${tax.min_cards}+ cards pulling the same direction) — the finishers below are generic to your colors.</div>`;
       $("themes").innerHTML = th;
     } else {
       $("themes").innerHTML = th;
-      const jobs = themesRanked.map(([t, m]) => [t, m, tax.themes[t].payoffs]);
+      // Theme pairs get intersection suggestions first — cards that serve
+      // BOTH mechanics beat cards that serve one.
+      const active = new Set(themesRanked.map(([t]) => t));
+      for (const [pair, spec] of Object.entries(tax.intersections || {})) {
+        const [a, b] = pair.split("|");
+        if (!active.has(a) || !active.has(b)) continue;
+        status(`Theme combo: ${spec.label}…`);
+        const sugg = await themeSuggestions(spec.payoffs, ident, maxPrice, deckSet);
+        th += `<div class="pill-row"><b>${esc(spec.label)}</b>
+               <span class="pill">both themes present</span></div>`;
+        th += sugg.map(finisherCardHtml).join("");
+        $("themes").innerHTML = th;
+      }
+      const jobs = themesRanked.map(([t, m, cm, gl]) =>
+        [t, m, tax.themes[t].payoffs, cm, gl]);
       if (tribal) {
         jobs.push([`${tribal[0]} tribal`, tribal[1],
-                   tax.tribal.payoffs.map(q => q.split("{TYPE}").join(tribal[0]))]);
+                   tax.tribal.payoffs.map(q => q.split("{TYPE}").join(tribal[0])),
+                   false, false]);
       }
-      for (const [theme, matched, queries] of jobs) {
+      for (const [theme, matched, queries, cmdrHit, isGoal] of jobs) {
         status(`Theme payoffs: ${theme}…`);
         const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet);
-        th += `<div class="pill-row"><b>${esc(theme)}</b>
-               <span class="pill">${matched.length} cards, e.g. ${esc(matched.slice(0, 4).join(", "))}</span></div>`;
+        const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
+          + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");
+        th += `<div class="pill-row"><b>${esc(theme)}</b>${tags}
+               <span class="pill">${matched.length ? matched.length + " cards, e.g. " + esc(matched.slice(0, 4).join(", ")) : "not in the pile yet — building toward it"}</span></div>`;
         th += sugg.length ? sugg.map(finisherCardHtml).join("")
                           : `<div class="hint">nothing new in identity/budget</div>`;
         $("themes").innerHTML = th;
