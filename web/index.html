@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deck Forge — Commander deck helper</title>
+<style>
+  :root {
+    --bg: #14161f; --panel: #1d2030; --panel2: #232741; --text: #e8e9f0;
+    --dim: #9aa0b8; --accent: #7aa2ff; --good: #6fd08c; --warn: #ffb454;
+    --bad: #ff6b6b; --border: #32365227;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, Segoe UI, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 18px 24px 6px; }
+  h1 { margin: 0; font-size: 22px; }
+  h1 small { color: var(--dim); font-weight: normal; font-size: 13px; margin-left: 10px; }
+  main { display: grid; grid-template-columns: minmax(280px, 380px) 1fr;
+         gap: 16px; padding: 16px 24px 40px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid #323652;
+           border-radius: 10px; padding: 14px 16px; }
+  textarea { width: 100%; height: 340px; background: var(--panel2); color: var(--text);
+             border: 1px solid #3a3f63; border-radius: 8px; padding: 10px;
+             font: 13px/1.45 ui-monospace, Consolas, monospace; resize: vertical; }
+  input[type=text], input[type=number] {
+    background: var(--panel2); color: var(--text); border: 1px solid #3a3f63;
+    border-radius: 6px; padding: 6px 8px; width: 100%; font-size: 14px; }
+  label { display: block; margin: 10px 0 3px; color: var(--dim); font-size: 13px; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  button { margin-top: 14px; width: 100%; padding: 10px; font-size: 16px;
+           background: var(--accent); color: #10131f; font-weight: 600;
+           border: 0; border-radius: 8px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 8px; }
+  #status { margin-top: 10px; font-size: 13px; color: var(--warn); min-height: 1.2em; }
+  section { margin-bottom: 22px; }
+  section h2 { font-size: 17px; margin: 0 0 8px; border-bottom: 1px solid #323652;
+               padding-bottom: 6px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+               gap: 8px; }
+  .stat { background: var(--panel2); border-radius: 8px; padding: 8px 12px; }
+  .stat b { font-size: 18px; }
+  .stat .target { color: var(--dim); font-size: 12px; }
+  .ok { color: var(--good); } .low { color: var(--bad); } .high { color: var(--warn); }
+  .combo { background: var(--panel2); border-radius: 8px; padding: 8px 12px;
+           margin: 6px 0; font-size: 14px; }
+  .combo a { color: var(--accent); text-decoration: none; }
+  .combo .produces { color: var(--dim); font-size: 13px; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 9px;
+         margin-left: 6px; vertical-align: 1px; }
+  .tag.finite { background: #234631; color: var(--good); }
+  .tag.infinite { background: #4a2330; color: var(--bad); }
+  .tag.ends { background: #233a56; color: var(--accent); }
+  .addcard { font-weight: 600; margin: 12px 0 2px; }
+  .addcard .price { color: var(--dim); font-weight: normal; font-size: 13px; }
+  details { margin: 6px 0; }
+  summary { cursor: pointer; color: var(--dim); }
+  .finisher { display: flex; gap: 10px; background: var(--panel2); border-radius: 8px;
+              padding: 8px 12px; margin: 6px 0; }
+  .finisher .name { font-weight: 600; white-space: nowrap; }
+  .finisher .name a { color: var(--text); text-decoration: none; }
+  .finisher .name a:hover { color: var(--accent); }
+  .finisher .text { color: var(--dim); font-size: 13px; }
+  .pill-row { margin: 4px 0 10px; }
+  .pill { display: inline-block; background: var(--panel2); border-radius: 12px;
+          padding: 2px 10px; margin: 2px 4px 2px 0; font-size: 12px; color: var(--dim); }
+  .err { color: var(--bad); }
+  .checkline { margin-top: 8px; font-size: 13px; color: var(--dim); }
+  .checkline input { vertical-align: -2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Deck Forge <small>paste a pile of cards → see how to make it win</small></h1>
+</header>
+<main>
+  <div class="panel">
+    <label>Card list — any size, one per line (<code>1x Sol Ring</code> or just <code>Sol Ring</code>)</label>
+    <textarea id="decklist" placeholder="1x Gray Merchant of Asphodel
+1x Zulaport Cutthroat
+Blood Artist
+..."></textarea>
+    <label>Commander (optional — leave blank for a theme pile; colors are inferred)</label>
+    <input type="text" id="commander" placeholder="The Ever-Changing 'Dane">
+    <div class="row">
+      <div><label>Max card price ($)</label><input type="number" id="maxprice" value="20"></div>
+      <div><label>&nbsp;</label>
+        <div class="checkline"><input type="checkbox" id="showinf"> show infinite combos</div>
+      </div>
+    </div>
+    <button id="go">Analyze</button>
+    <div id="status"></div>
+    <div class="hint">Data: Scryfall + Commander Spellbook, fetched live from your browser.
+      Nothing is uploaded anywhere else. Infinite combos are hidden by default on purpose.</div>
+  </div>
+  <div id="results" class="panel" style="display:none">
+    <section id="health"></section>
+    <section id="combos"></section>
+    <section id="almost"></section>
+    <section id="finishers"></section>
+  </div>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const front = n => n.split("//")[0].trim();
+
+const GAME_ENDING = /wins? the game|loses? the game|damage|life loss|mill|poison|infect|combat/i;
+const FINISHER_BUCKETS = {
+  "Alternate win condition": '(o:"you win the game") -o:"can\'t win"',
+  "Drain the table": 'o:/each opponent loses [X\\d]+ life/',
+  "Burn the table": 'o:/deals [X\\d]+ damage to each opponent/',
+  "Overrun / go wide": '(t:sorcery or t:instant) o:/creatures you control get \\+[X\\d]/',
+  "Extra combat": 'o:"additional combat phase"',
+  "Mass evasion": '(t:sorcery or t:instant or t:enchantment) (o:"can\'t be blocked" or o:"gain flying until") o:"creatures you control"',
+};
+// Commander deck baseline (per ~99 cards) — scaled down for theme piles.
+const BASELINE = { Lands: 37, Ramp: 10, "Card draw": 10, Interaction: 10, "Board wipes": 3 };
+
+function parseList(text) {
+  const cards = [];
+  for (let raw of text.split("\n")) {
+    let line = raw.trim();
+    if (!line || line.startsWith("//") || /^(deck|mainboard|sideboard|maybeboard)$/i.test(line)) continue;
+    const m = line.match(/^(\d+)x?\s+(.+)$/);
+    let qty = 1, name = line;
+    if (m) { qty = +m[1]; name = m[2]; }
+    name = name.replace(/\s*\*CMDR\*\s*/i, "").replace(/\s*\([A-Z0-9]{2,6}\)\s*\d*\s*$/, "").trim();
+    if (name) cards.push({ name, qty });
+  }
+  return cards;
+}
+
+async function scryfallCollection(names, status) {
+  const found = new Map(), missing = [];
+  for (let i = 0; i < names.length; i += 75) {
+    status(`Looking up cards on Scryfall (${i + 1}–${Math.min(i + 75, names.length)} of ${names.length})…`);
+    const r = await fetch("https://api.scryfall.com/cards/collection", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiers: names.slice(i, i + 75).map(n => ({ name: n })) }),
+    });
+    if (!r.ok) throw new Error("Scryfall lookup failed: " + r.status);
+    const d = await r.json();
+    for (const c of d.data) found.set(front(c.name).toLowerCase(), c);
+    for (const nf of d.not_found || []) missing.push(nf.name);
+    await sleep(120);
+  }
+  return { found, missing };
+}
+
+function oracleOf(c) {
+  if (c.oracle_text) return c.oracle_text;
+  return (c.card_faces || []).map(f => f.oracle_text || "").join("\n");
+}
+
+function categorize(card) {
+  const t = card.type_line || "", o = oracleOf(card), ol = o.toLowerCase();
+  if (/\bLand\b/.test(t)) return "Lands";
+  if (/add \{|search your library for .* land .*onto the battlefield/i.test(o)
+      && !/\bCreature\b.*\bAura\b/.test(t)) return "Ramp";
+  if (/draw (a|two|three|x|that many) card/.test(ol)) return "Card draw";
+  if (/destroy all|exile all|each creature|all creatures/.test(ol)
+      && /destroy|exile|-\d+\/-\d+|sacrifices/.test(ol)) return "Board wipes";
+  if (/(destroy|exile) target|counter target|deals? \d+ damage to (any target|target creature)|gets? -\d+\/-\d+/.test(ol))
+    return "Interaction";
+  return "Other";
+}
+
+async function findCombos(commanders, mainNames) {
+  const body = {
+    commanders: commanders.map(c => ({ card: c, quantity: 1 })),
+    main: mainNames.map(n => ({ card: n, quantity: 1 })),
+  };
+  const r = await fetch("https://backend.commanderspellbook.com/find-my-combos", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error("Commander Spellbook failed: " + r.status);
+  return (await r.json()).results;
+}
+
+function comboInfo(combo, deckSet) {
+  const uses = combo.uses.map(u => u.card.name);
+  const produces = combo.produces.map(p => p.feature.name);
+  return {
+    id: combo.id, uses, produces,
+    missing: uses.filter(u => !deckSet.has(front(u).toLowerCase())),
+    infinite: produces.some(p => /^(near-)?infinite/i.test(p)),
+    ends: produces.some(p => GAME_ENDING.test(p)),
+    price: combo.prices && combo.prices.tcgplayer ? +combo.prices.tcgplayer : null,
+    popularity: combo.popularity || 0,
+    url: `https://commanderspellbook.com/combo/${combo.id}/`,
+  };
+}
+
+function comboHtml(c) {
+  return `<div class="combo">
+    <a href="${c.url}" target="_blank">${esc(c.uses.join(" + "))}</a>
+    <span class="tag ${c.infinite ? "infinite" : "finite"}">${c.infinite ? "infinite" : "finite"}</span>
+    ${c.ends ? '<span class="tag ends">ends the game</span>' : ""}
+    <div class="produces">→ ${esc(c.produces.join("; "))}</div></div>`;
+}
+
+async function scryfallSearch(q, status) {
+  const r = await fetch("https://api.scryfall.com/cards/search?order=edhrec&unique=cards&q="
+                        + encodeURIComponent(q));
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error("Scryfall search failed: " + r.status);
+  return (await r.json()).data;
+}
+
+async function analyze() {
+  const btn = $("go"), statusEl = $("status");
+  const status = m => statusEl.textContent = m;
+  btn.disabled = true;
+  try {
+    const entries = parseList($("decklist").value);
+    if (!entries.length) { status("Paste some cards first."); btn.disabled = false; return; }
+    const commander = $("commander").value.trim();
+    const maxPrice = +$("maxprice").value || 20;
+    const showInf = $("showinf").checked;
+
+    const allNames = entries.map(e => e.name);
+    if (commander) allNames.push(commander);
+    const { found, missing } = await scryfallCollection([...new Set(allNames)], status);
+
+    // Identity, counts, health
+    const deckSet = new Set([...found.keys()]);
+    for (const e of entries) deckSet.add(front(e.name).toLowerCase());
+    const identSet = new Set();
+    const counts = { Lands: 0, Ramp: 0, "Card draw": 0, Interaction: 0, "Board wipes": 0, Other: 0 };
+    let total = 0;
+    for (const e of entries) {
+      const c = found.get(front(e.name).toLowerCase());
+      total += e.qty;
+      if (!c) continue;
+      (c.color_identity || []).forEach(x => identSet.add(x));
+      counts[categorize(c)] += e.qty;
+    }
+    let cmdrCard = null;
+    if (commander) {
+      cmdrCard = found.get(front(commander).toLowerCase());
+      if (cmdrCard) (cmdrCard.color_identity || []).forEach(x => identSet.add(x));
+    }
+    const ident = "WUBRG".split("").filter(x => identSet.has(x)).join("") || "C";
+    const scale = Math.min(1, total / 99);
+
+    let h = `<h2>Deck health — ${total} cards, identity ${ident}${cmdrCard ? ", commander " + esc(cmdrCard.name) : ""}</h2>`;
+    if (missing.length) h += `<div class="err">Not found on Scryfall (typos?): ${esc(missing.join(", "))}</div>`;
+    h += `<div class="stat-grid">`;
+    for (const [cat, base] of Object.entries(BASELINE)) {
+      const want = Math.round(base * scale);
+      const have = counts[cat];
+      const cls = have >= want ? "ok" : (have >= want * 0.6 ? "high" : "low");
+      h += `<div class="stat"><div>${cat}</div><b class="${cls}">${have}</b>
+            <span class="target">/ ~${want} target${scale < 1 ? " (scaled)" : ""}</span></div>`;
+    }
+    h += `<div class="stat"><div>Everything else</div><b>${counts.Other}</b></div></div>`;
+    if (scale < 1) h += `<div class="hint">Targets scaled to your ${total}-card pile; a full deck wants ~${BASELINE.Lands} lands, ${BASELINE.Ramp} ramp, ${BASELINE["Card draw"]} draw, ${BASELINE.Interaction} interaction.</div>`;
+    $("health").innerHTML = h;
+
+    // Combos
+    status("Asking Commander Spellbook for combos…");
+    const results = await findCombos(cmdrCard ? [cmdrCard.name] : [],
+                                     entries.map(e => e.name));
+    const included = results.included.map(c => comboInfo(c, deckSet));
+    const almost = results.almostIncluded.map(c => comboInfo(c, deckSet))
+                          .filter(c => c.missing.length === 1);
+
+    const incShow = included.filter(c => showInf || !c.infinite);
+    const incHidden = included.length - incShow.length;
+    $("combos").innerHTML = `<h2>Combos already in the pile (${included.length})</h2>`
+      + (incShow.map(comboHtml).join("") || "")
+      + (incHidden ? `<div class="hint">${incHidden} infinite combo(s) hidden — tick "show infinite" to list them (useful for finding cuts).</div>` : "")
+      + (!included.length ? `<div class="hint">None yet — see below for what one card could unlock.</div>` : "");
+
+    const byCard = new Map();
+    for (const c of almost) {
+      const k = c.missing[0];
+      if (!byCard.has(k)) byCard.set(k, []);
+      byCard.get(k).push(c);
+    }
+    const ranked = [...byCard.entries()].map(([card, combos]) => {
+      const finite = combos.filter(c => !c.infinite);
+      const ends = finite.filter(c => c.ends);
+      const prices = combos.map(c => c.price).filter(p => p != null);
+      return { card, combos, finite, ends, price: prices.length ? Math.min(...prices) : null };
+    }).filter(r => (showInf || r.finite.length) && (r.price == null || r.price <= maxPrice))
+      .sort((a, b) => b.ends.length - a.ends.length || b.finite.length - a.finite.length
+                      || Math.max(...b.combos.map(c => c.popularity)) - Math.max(...a.combos.map(c => c.popularity)));
+
+    let ah = `<h2>One card away (${ranked.length} candidates under $${maxPrice})</h2>`;
+    for (const r of ranked.slice(0, 12)) {
+      ah += `<div class="addcard">+ ${esc(r.card)} <span class="price">${r.price != null ? "~$" + r.price.toFixed(2) + " combo" : ""}</span>
+             — ${r.finite.length} finite (${r.ends.length} game-ending), ${r.combos.length - r.finite.length} infinite</div>`;
+      ah += (showInf ? r.combos : r.finite).slice(0, 3).map(comboHtml).join("");
+    }
+    if (ranked.length > 12) ah += `<div class="hint">…and ${ranked.length - 12} more.</div>`;
+    if (!ranked.length) ah += `<div class="hint">No finite near-miss combos in budget — check the finishers below instead; that's usually the better path anyway.</div>`;
+    $("almost").innerHTML = ah;
+
+    // Finishers
+    let fh = `<h2>Finite finishers to close games (identity ${ident}, under $${maxPrice}, EDHREC-ranked)</h2>`;
+    $("finishers").innerHTML = fh;
+    for (const [bucket, q] of Object.entries(FINISHER_BUCKETS)) {
+      status(`Searching finishers: ${bucket}…`);
+      const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
+      const fresh = cards.filter(c => !deckSet.has(front(c.name).toLowerCase())).slice(0, 6);
+      fh += `<div class="pill-row"><b>${bucket}</b></div>`;
+      if (!fresh.length) fh += `<div class="hint">nothing new in identity/budget</div>`;
+      for (const c of fresh) {
+        const text = oracleOf(c).split("\n").find(l => GAME_ENDING.test(l) || /win the game/i.test(l))
+                     || oracleOf(c).split("\n")[0] || "";
+        const price = c.prices && c.prices.usd ? ` · $${c.prices.usd}` : "";
+        fh += `<div class="finisher"><div class="name"><a href="${c.scryfall_uri}" target="_blank">${esc(c.name)}</a><br>
+               <span class="text">${esc(c.mana_cost || "")}${price}</span></div>
+               <div class="text">${esc(text.slice(0, 220))}</div></div>`;
+      }
+      $("finishers").innerHTML = fh;
+      await sleep(120);
+    }
+    status("");
+    $("results").style.display = "";
+  } catch (e) {
+    status("Error: " + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("go").addEventListener("click", analyze);
+</script>
+</body>
+</html>

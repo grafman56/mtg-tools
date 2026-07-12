@@ -50,3 +50,17 @@ Counters 14402209 · Vorel Counters 14090810 · Rafiq 14179232 · Raggadragga
   process...").
 - Part 2: Forge .dck export + headless sim harness (combo assembly rate,
   average win turn vs a baseline deck).
+
+## Web UI (web/index.html)
+
+Single self-contained HTML file, zero backend — the browser calls Scryfall and
+Commander Spellbook directly (both are CORS-open). Paste any pile of cards
+(theme seed or full deck), optional commander, and it shows: deck health vs
+the standard Commander baseline (37 lands / 10 ramp / 10 draw / 10
+interaction, scaled to pile size), combos in the pile, finite one-card-away
+combos, and EDHREC-ranked finite finishers under a price cap. Infinites
+hidden by default.
+
+Run locally: `python -m http.server 8420 --directory web` then open
+http://localhost:8420 — or just double-click the file. To share with a
+friend: send them the file, or enable GitHub Pages on this repo.
