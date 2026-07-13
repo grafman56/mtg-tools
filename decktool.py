@@ -38,7 +38,7 @@ from pathlib import Path
 
 CACHE_DIR = Path(__file__).parent / "cache"
 SPELLBOOK_URL = "https://backend.commanderspellbook.com/find-my-combos"
-UA = "mtg-tools/0.1 (decktool; contact: pauleitel4@gmail.com)"
+UA = "mtg-tools/0.1 (decktool; +https://github.com/grafman56/mtg-tools)"
 
 # Feature names that mean "this actually ends the game".
 GAME_ENDING_PAT = re.compile(
