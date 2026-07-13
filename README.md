@@ -1,93 +1,114 @@
 # mtg-tools
 
-Deck-building helper for Paul's Commander decks. Part 1 of the two-part plan
-(part 2 = Forge headless AI-vs-AI feasibility sims, not started).
+Deck-building helper for casual Commander decks. It answers one question: "my
+deck does not close games, what should I add?" It finds combos already in a
+deck and one card away, detects the deck's themes, and suggests **finite** (non-
+infinite) game-enders in the deck's colors and budget, ranked by what people
+actually play.
 
-## decktool.py
+It is a recommender, not a rules engine. The work is done by three community
+services (Scryfall for cards, Commander Spellbook for combos, EDHREC for
+popularity); this project is the thin layer on top that filters to finite wins,
+detects themes, and ranks suggestions.
 
-No dependencies beyond stdlib (Python 3.10+). Data sources: Archidekt API
-(decklists), Commander Spellbook API (combos), Scryfall API (finisher search).
+Live web app: **https://grafman56.github.io/mtg-tools/**
+
+## Two ways to use it
+
+### Command line (`decktool.py`)
+
+Python 3.10+, no dependencies beyond the standard library.
 
 ```
-python decktool.py fetch 23718180          # normalized decklist from Archidekt
-python decktool.py combos 23718180         # combos in deck + 1 card away
-python decktool.py wincons 23718180        # only combos that end the game
-python decktool.py finishers 23718180     # non-combo finite game-enders, EDHREC-ranked
+python decktool.py fetch      <deck>   # normalized decklist
+python decktool.py combos     <deck>   # combos in deck + one card away
+python decktool.py wincons    <deck>   # only combos that end the game
+python decktool.py finishers  <deck>   # finite, non-combo game-enders (EDHREC-ranked)
+python decktool.py themes     <deck>   # dominant themes + payoffs keyed to them
 ```
 
-Deck argument: Archidekt ID, Archidekt URL, or path to a local text list
-(`1x Card Name`, commander marked `*CMDR*`).
+`<deck>` is an Archidekt ID, an Archidekt URL, or a path to a text list
+(`1x Card Name` per line, commander marked `*CMDR*` or under a `Commander`
+header).
 
-Flags: `--show-infinite` (collapsed by
-default), `--max-price N` (default $20), `--json` (raw report).
+Flags: `--show-infinite` (infinite combos are collapsed by default),
+`--max-price N` (default $20), `--json` (raw report for piping).
 
-## Design notes
+### Web app (`docs/index.html`)
 
-- Infinite combos are detected via Spellbook `produces` features starting with
-  "Infinite"/"Near-infinite" and hidden by default
-- Key learning: Commander Spellbook near-misses are
-  almost all infinite. The real gap is *finite finishers*, hence the
-  `finishers` command: bucketed Scryfall searches (alt-win, drain, burn,
-  overrun, extra combat, mass evasion) in the commander's color identity,
-  ordered by EDHREC rank, excluding cards already in the deck.
-- Archidekt categories with `includedInDeck: false` (Maybeboard etc.) are
-  excluded from the mainboard.
-- Scryfall requires both User-Agent and Accept headers.
+One self-contained HTML file, no backend. Paste any pile of cards (a theme seed
+or a full deck) and an optional commander, and it shows deck health against a
+standard Commander baseline, combos in the pile, finite one-card-away combos,
+theme detection, EDHREC synergy picks, and finite finishers under a price cap.
 
-## TODO
+Run it locally with `python -m http.server 8420 --directory docs` and open
+http://localhost:8420, or just double-click the file. To share, send the file
+or point someone at the live URL above.
 
-- Tune the "Overrun effects" Scryfall bucket (surfaces jank; EDHREC order not
-  great there).
-- Regex misses wordy drains like Torment of Hailfire ("Repeat the following
-  process...").
-- Part 2: Forge .dck export + headless sim harness (combo assembly rate,
-  average win turn vs a baseline deck).
+## Architecture at a glance
 
-## Web UI (docs/index.html)
+Two front-ends (the CLI and the web app) give the same answers because the
+knowledge that drives them lives in shared **data files** both read, not in
+either program's code:
 
-Single self-contained HTML file, zero backend — the browser calls Scryfall and
-Commander Spellbook directly (both are CORS-open). Paste any pile of cards
-(theme seed or full deck), optional commander, and it shows: deck health vs
-the standard Commander baseline (37 lands / 10 ramp / 10 draw / 10
-interaction, scaled to pile size), combos in the pile, finite one-card-away
-combos, and EDHREC-ranked finite finishers under a price cap. Infinites
-hidden by default.
+```
+  Archidekt / paste / text  ──normalize──▶  commanders + main
+        │                                          │
+        ▼                                          ▼
+   decktool.py (Python CLI)             Deck Forge (docs/index.html)
+        │        both read the shared brain        │
+        ├── docs/themes.json  (theme taxonomy) ────┤
+        │   docs/combos.json  (combo snapshot) ────┤  (web only)
+        ▼                                          ▼
+        Scryfall · Commander Spellbook · EDHREC (live APIs)
+```
 
-Run locally: `python -m http.server 8420 --directory docs` then open
-http://localhost:8420 — or just double-click the file. To share with a
-friend: send them the file, or enable GitHub Pages on this repo.
+`themes.json` is the seam: define a theme once and both front-ends use it. The
+full rationale behind every design choice, and the general programming practices
+they illustrate, are in [ARCHITECTURE.md](ARCHITECTURE.md). The short version:
 
-## Theme-aware suggestions (v0.3)
+- **Compose community APIs, do not build a rules engine.** The unique value is
+  the thin layer on top: finite-only filtering, theme detection, budget/color
+  ranking.
+- **Shared knowledge lives in JSON both front-ends read**, so the Python CLI and
+  the JavaScript web app never drift.
+- **The web app ships a precomputed combo snapshot** (`combos.json`) because
+  Commander Spellbook's backend blocks browser (CORS) calls. A server would be
+  upkeep; a static snapshot is not.
+- **A preference is a first-class filter:** infinite combos are detected and
+  hidden. The `finishers` command exists because the near-miss combos turned out
+  to be almost all infinite, so finite finishers were the real gap.
+- **Fuzzy theme detection is checked against known decks** (`validate_themes.py`)
+  so tuning the regexes does not silently break archetype detection.
 
-`python decktool.py themes <deck>` and the web UI's "Themes in this pile"
-section detect the deck's dominant mechanics via the oracle-text taxonomy in
-docs/themes.json (17 themes + dynamic tribal detection with a higher bar for
-ubiquitous types like Human), then suggest payoffs keyed to those mechanics
-instead of generic color staples. Validated against all 15 real decks —
-each detected its known archetype. The web UI also shows EDHREC synergy
-picks for the commander (json.edhrec.com is CORS-open; synergy = played
-far more with this commander than elsewhere).
+## Data files
 
-## v0.4: commander-weighted themes, intersections, goal box
+- `docs/themes.json` — theme taxonomy: per-theme detection regexes and payoff
+  Scryfall queries, plus tribal thresholds, theme intersections, and goal
+  keywords. Edit this to add or tune a theme; both front-ends pick it up.
+- `docs/combos.json` — compact Commander Spellbook snapshot, built by
+  `scripts/build_combo_db.py`. Refresh occasionally:
 
-- The commander's own oracle text is the build-around signal: themes it
-  matches are always surfaced (support bar drops to 2 cards) and tagged.
-- New themes: Theft / mind control, Exile / impulse draw.
-- themes.json "intersections": when two themes co-occur (clones+sac,
-  theft+sac, theft+clones, treasure+sac, exile+treasure), cards serving both
-  mechanics are suggested first.
-- Web UI goal box: describe the gameplan in words ("steal creatures,
-  sacrifice them, become them") — keyword map in themes.json "goals" forces
-  those themes even in an empty pile. Plain keyword matching, not NLP.
+  ```
+  curl -o variants.json https://json.commanderspellbook.com/variants.json
+  python scripts/build_combo_db.py variants.json
+  ```
 
-## v0.5 (branch: import + fuzzy names + theme picker)
+## Gotchas worth knowing
 
-- Paste importer understands Archidekt "Export → Text" and Moxfield/MTGA
-  formats: set codes, collector numbers, foil flags, and [Category] tags are
-  stripped; [Commander] auto-fills the commander field; Maybeboard/Sideboard
-  sections are skipped. Direct URL import is impossible from the browser —
-  Archidekt CORS-allows only localhost:3000 and Moxfield 403s outside callers.
-- Misspelled names get a second chance through Scryfall's fuzzy endpoint
-  (capped at 15 per run) and show as "Auto-corrected: X → Y".
-- "Or pick themes to build toward…" checkbox picker forces themes, same as
-  the goal box.
+- Scryfall requires **both** a `User-Agent` and an `Accept` header, or it returns
+  400.
+- Archidekt categories flagged `includedInDeck: false` (Maybeboard, Sideboard)
+  are excluded from the mainboard.
+- Double-faced card names are split on `//` to match Spellbook's front-face
+  naming.
+- The web app cannot import from a deck URL: Archidekt allows CORS only from
+  localhost:3000 and Moxfield blocks outside callers, so import is paste-based.
+
+## Known limitations / TODO
+
+- The "Overrun effects" Scryfall bucket surfaces jank and needs tuning.
+- The drain-detection regex misses wordy cards like Torment of Hailfire.
+- `combos.json` is a snapshot and goes stale between rebuilds.
+- Part 2 of the original plan, Forge headless AI-vs-AI simulations (combo
+  assembly rate, average win turn vs a baseline), is not built.
