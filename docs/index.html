@@ -87,6 +87,10 @@ Blood Artist
     <input type="text" id="commander" placeholder="The Ever-Changing 'Dane">
     <label>What should the deck do? (optional — forces themes even if the pile doesn't show them yet)</label>
     <input type="text" id="goal" placeholder="steal creatures, sacrifice them, become them">
+    <details style="margin-top:10px">
+      <summary class="hint" style="cursor:pointer">Or pick themes to build toward…</summary>
+      <div id="themeChecks" class="checkline"></div>
+    </details>
     <div class="row">
       <div><label>Max card price ($)</label><input type="number" id="maxprice" value="20"></div>
       <div><label>&nbsp;</label>
@@ -128,22 +132,46 @@ const FINISHER_BUCKETS = {
 // Commander deck baseline (per ~99 cards) — scaled down for theme piles.
 const BASELINE = { Lands: 37, Ramp: 10, "Card draw": 10, Interaction: 10, "Board wipes": 3 };
 
+// Accepts plain lists plus Archidekt ("1x Name (set) 123 *F* [Category]"),
+// Moxfield/MTGA ("1 Name (SET) 123"), and section-header exports. Cards in a
+// Commander section/category come back separately; Sideboard/Maybeboard/
+// Considering sections are ignored.
 function parseList(text) {
-  const cards = [];
+  const cards = [], commanders = [];
+  let section = "deck";
   for (let raw of text.split("\n")) {
     let line = raw.trim();
-    if (!line || line.startsWith("//") || /^(deck|mainboard|sideboard|maybeboard)$/i.test(line)) continue;
+    if (!line || line.startsWith("//")) continue;
+    const header = line.match(/^\[?(commander|deck|mainboard|main|sideboard|maybeboard|considering|tokens?)s?:?\]?$/i);
+    if (header) { section = header[1].toLowerCase(); continue; }
+    if (/^(sideboard|maybeboard|considering|token)/.test(section)) continue;
+
     const m = line.match(/^(\d+)x?\s+(.+)$/);
     let qty = 1, name = line;
     if (m) { qty = +m[1]; name = m[2]; }
-    name = name.replace(/\s*\*CMDR\*\s*/i, "").replace(/\s*\([A-Z0-9]{2,6}\)\s*\d*\s*$/, "").trim();
-    if (name) cards.push({ name, qty });
+
+    // Archidekt category tag — may mark the commander or a skipped board.
+    let isCmdr = section === "commander" || /\*CMDR\*/i.test(name);
+    const cat = name.match(/\[([^\]]*)\]\s*$/);
+    if (cat) {
+      if (/maybeboard|sideboard|considering/i.test(cat[1])) continue;
+      if (/commander/i.test(cat[1])) isCmdr = true;
+      name = name.slice(0, cat.index);
+    }
+    name = name
+      .replace(/\*CMDR\*/i, "")
+      .replace(/\*[A-Z]+\*/g, "")            // foil/etch flags like *F*
+      .replace(/\^[^^]*\^/g, "")             // Archidekt ^modifier^ tags
+      .replace(/\s*\(([A-Za-z0-9]{2,6})\)(\s+[\w★-]+)?\s*$/, "") // (set) 123
+      .trim();
+    if (!name) continue;
+    (isCmdr ? commanders : cards).push({ name, qty });
   }
-  return cards;
+  return { cards, commanders: commanders.map(c => c.name) };
 }
 
 async function scryfallCollection(names, status) {
-  const found = new Map(), missing = [];
+  const found = new Map(), missing = [], corrections = [];
   for (let i = 0; i < names.length; i += 75) {
     status(`Looking up cards on Scryfall (${i + 1}–${Math.min(i + 75, names.length)} of ${names.length})…`);
     const r = await fetch("https://api.scryfall.com/cards/collection", {
@@ -156,7 +184,29 @@ async function scryfallCollection(names, status) {
     for (const nf of d.not_found || []) missing.push(nf.name);
     await sleep(120);
   }
-  return { found, missing };
+  // Second chance for typos: Scryfall's fuzzy endpoint. Keyed under the name
+  // as pasted, so the rest of the run just works; correction is reported.
+  const stillMissing = [];
+  for (const n of missing.slice(0, 15)) {
+    status(`"${n}" not found — trying fuzzy match…`);
+    try {
+      const r = await fetch("https://api.scryfall.com/cards/named?fuzzy="
+                            + encodeURIComponent(front(n)));
+      if (r.ok) {
+        const c = await r.json();
+        found.set(front(n).toLowerCase(), c);
+        found.set(front(c.name).toLowerCase(), c);
+        corrections.push({ from: n, to: c.name });
+      } else {
+        stillMissing.push(n);
+      }
+    } catch (e) {
+      stillMissing.push(n);
+    }
+    await sleep(120);
+  }
+  stillMissing.push(...missing.slice(15));
+  return { found, missing: stillMissing, corrections };
 }
 
 function oracleOf(c) {
@@ -249,11 +299,11 @@ function typeParts(card) {
            subtypes: subs ? subs.split(/\s+/) : [] };
 }
 
-function detectThemesJs(cardObjs, tax, cmdrCard, goalText) {
-  // Themes the user typed as a goal are forced in; themes the commander's own
-  // text matches are the build-around signal and get a lower support bar.
+function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
+  // Themes the user typed as a goal or ticked are forced in; themes the
+  // commander's own text matches get a lower support bar.
   const goal = (goalText || "").toLowerCase();
-  const goalThemes = new Set();
+  const goalThemes = new Set(forced || []);
   for (const [theme, words] of Object.entries(tax.goals || {})) {
     if (goal && words.some(w => goal.includes(w))) goalThemes.add(theme);
   }
@@ -366,15 +416,27 @@ async function analyze() {
   const status = m => statusEl.textContent = m;
   btn.disabled = true;
   try {
-    const entries = parseList($("decklist").value);
-    if (!entries.length) { status("Paste some cards first."); btn.disabled = false; return; }
+    const parsed = parseList($("decklist").value);
+    const entries = parsed.cards;
+    if (!entries.length && !parsed.commanders.length) {
+      status(/archidekt\.com|moxfield\.com/i.test($("decklist").value)
+        ? "Deck sites block browser access — on Archidekt use Export → Text and paste that here (the [Commander] tag is picked up automatically)."
+        : "Paste some cards first.");
+      btn.disabled = false; return;
+    }
+    // A commander found in the pasted list (e.g. Archidekt's [Commander] tag)
+    // fills the field so the user can see and override it.
+    if (!$("commander").value.trim() && parsed.commanders.length) {
+      $("commander").value = parsed.commanders[0];
+    }
     const commander = $("commander").value.trim();
     const maxPrice = +$("maxprice").value || 20;
     const showInf = $("showinf").checked;
 
     const allNames = entries.map(e => e.name);
     if (commander) allNames.push(commander);
-    const { found, missing } = await scryfallCollection([...new Set(allNames)], status);
+    const { found, missing, corrections } =
+      await scryfallCollection([...new Set(allNames)], status);
 
     // Identity, counts, health
     const deckSet = new Set([...found.keys()]);
@@ -398,7 +460,8 @@ async function analyze() {
     const scale = Math.min(1, total / 99);
 
     let h = `<h2>Deck health — ${total} cards, identity ${ident}${cmdrCard ? ", commander " + esc(cmdrCard.name) : ""}</h2>`;
-    if (missing.length) h += `<div class="err">Not found on Scryfall (typos?): ${esc(missing.join(", "))}</div>`;
+    if (corrections.length) h += `<div class="hint">Auto-corrected: ${corrections.map(c => esc(c.from) + " → " + esc(c.to)).join("; ")}</div>`;
+    if (missing.length) h += `<div class="err">Not found on Scryfall even with fuzzy matching: ${esc(missing.join(", "))}</div>`;
     h += `<div class="stat-grid">`;
     for (const [cat, base] of Object.entries(BASELINE)) {
       const want = Math.round(base * scale);
@@ -417,8 +480,10 @@ async function analyze() {
     const cardObjs = entries.map(e => found.get(front(e.name).toLowerCase()))
                             .filter(Boolean);
     const goalText = $("goal").value.trim();
+    const forced = [...document.querySelectorAll("#themeChecks input:checked")]
+      .map(cb => cb.value);
     const { ranked: themesRanked, tribal } =
-      detectThemesJs(cardObjs, tax, cmdrCard, goalText);
+      detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced);
     let th = `<h2>Themes in this pile — suggestions that fit what it's doing</h2>`;
     if (!themesRanked.length && !tribal) {
       th += `<div class="hint">No dominant theme yet (needs ${tax.min_cards}+ cards pulling the same direction) — the finishers below are generic to your colors.</div>`;
@@ -547,6 +612,13 @@ async function analyze() {
   }
 }
 $("go").addEventListener("click", analyze);
+
+// Theme picker checkboxes, straight from the taxonomy.
+loadThemes().then(tax => {
+  $("themeChecks").innerHTML = Object.keys(tax.themes).map(t =>
+    `<label style="display:inline-block;margin:3px 12px 3px 0">
+       <input type="checkbox" value="${esc(t)}"> ${esc(t)}</label>`).join("");
+}).catch(() => { /* picker is optional; analyze still loads themes itself */ });
 </script>
 </body>
 </html>

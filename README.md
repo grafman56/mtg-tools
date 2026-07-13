@@ -79,3 +79,15 @@ far more with this commander than elsewhere).
 - Web UI goal box: describe the gameplan in words ("steal creatures,
   sacrifice them, become them") — keyword map in themes.json "goals" forces
   those themes even in an empty pile. Plain keyword matching, not NLP.
+
+## v0.5 (branch: import + fuzzy names + theme picker)
+
+- Paste importer understands Archidekt "Export → Text" and Moxfield/MTGA
+  formats: set codes, collector numbers, foil flags, and [Category] tags are
+  stripped; [Commander] auto-fills the commander field; Maybeboard/Sideboard
+  sections are skipped. Direct URL import is impossible from the browser —
+  Archidekt CORS-allows only localhost:3000 and Moxfield 403s outside callers.
+- Misspelled names get a second chance through Scryfall's fuzzy endpoint
+  (capped at 15 per run) and show as "Auto-corrected: X → Y".
+- "Or pick themes to build toward…" checkbox picker forces themes, same as
+  the goal box.
