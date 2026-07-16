@@ -266,7 +266,11 @@ def detect_themes(cards, taxonomy, commanders=()):
             ok = len(matched) >= (1 if cmdr_hit else min_cards)
         if ok:
             hits[theme] = (matched, cmdr_hit, score)
-    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -kv[1][2]))
+    # Rank by number of supporting cards, not score: a weighted theme's score
+    # is inflated by weights.strong relative to a legacy theme's raw count, so
+    # ranking on score would let converted themes jump unconverted ones on the
+    # multiplier alone. Score's only job is the fire gate above.
+    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
     ranked = [(t, m, ch) for t, (m, ch, _score) in ranked]
     ranked = ranked[:taxonomy["max_themes"] + 1]
 

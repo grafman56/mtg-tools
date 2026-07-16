@@ -343,8 +343,12 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
     }
   }
   const ranked = Object.entries(hits)
+    // Rank by supporting-card count, not score: a weighted theme's score is
+    // inflated by weights.strong vs a legacy theme's raw count, so score-based
+    // ranking would let converted themes jump unconverted ones on the
+    // multiplier. Score only gates whether a theme fires. Matches decktool.py.
     .sort((a, b) => (b[1].isGoal - a[1].isGoal) || (b[1].cmdrHit - a[1].cmdrHit)
-                    || (b[1].score - a[1].score))
+                    || (b[1].matched.length - a[1].matched.length))
     .slice(0, tax.max_themes + 2)
     .map(([theme, h]) => [theme, h.matched, h.cmdrHit, h.isGoal]);
   // Tribal: most common creature subtype, with a higher bar for types that
