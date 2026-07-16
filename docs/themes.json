@@ -68,6 +68,27 @@
         "o:/for each creature you control/ (o:damage or o:loses or o:token)"
       ]
     },
+    "Attack triggers / combat": {
+      "strong": [
+        "additional combat phase",
+        "triggers an additional time",
+        "whenever (a|one or more|another) creatures? you control attacks?\\b(?! alone)",
+        "whenever (a|one or more|another) creatures? you control deals? combat damage to a player",
+        "whenever you attack",
+        "attacking creatures? you control get"
+      ],
+      "weak": [
+        "whenever this creature attacks",
+        "when(ever)? .{0,22} attacks(?! alone)( a player)?,",
+        "whenever this creature deals combat damage to a player"
+      ],
+      "payoffs": [
+        "o:\"additional combat phase\" (t:instant or t:sorcery or t:enchantment or t:creature)",
+        "o:/whenever (a|one or more|another) creature.{0,18}you control attacks/ (o:create or o:draw or o:/each opponent loses/ or o:\"+1/+1\" or o:treasure or o:damage)",
+        "o:/whenever (a|another) creature you control attacks/ o:/an additional time/",
+        "o:/whenever (a|one or more) creature.{0,18}deals combat damage to a player/ (o:draw or o:create or o:loses or o:treasure)"
+      ]
+    },
     "+1/+1 counters / proliferate": {
       "strong": [
         "proliferate",
@@ -323,6 +344,7 @@
     "Blink / ETB value": ["blink", "flicker", "etb"],
     "Treasure / artifact tokens": ["treasure"],
     "Token swarm / go wide": ["token", "go wide", "swarm"],
+    "Attack triggers / combat": ["attack", "combat", "aggro", "swing", "extra combat", "attack trigger"],
     "+1/+1 counters / proliferate": ["counter", "proliferate"],
     "Graveyard / reanimator": ["graveyard", "reanimate", "recursion", "self-mill"],
     "Wheels / draw punishment": ["wheel", "draw punishment", "forced draw"],
