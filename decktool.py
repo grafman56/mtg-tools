@@ -221,19 +221,53 @@ def deck_card_data(arg, commanders, main):
 def detect_themes(cards, taxonomy, commanders=()):
     """Return ([(theme, [card names], is_cmdr_theme)...], tribal info or None).
     Themes the commander's own text matches are the build-around signal and
-    are always surfaced (with a lower support threshold)."""
+    are always surfaced (with a lower support threshold).
+
+    A theme scores in one of two ways. Legacy themes carry a flat "detect"
+    list: every matching card counts 1, and the theme fires at min_cards.
+    Weighted themes carry "strong" (build-around/payoff text) and "weak"
+    (incidental mentions) lists: a strong card is worth weights.strong, a
+    weak one weights.weak, and the theme must clear both a score floor and
+    min_strong genuine payoff cards before it fires. The split stops
+    incidental text (a lone "put a +1/+1 counter" on an aristocrats card)
+    from inventing a theme that isn't the deck's plan."""
     cmdr_keys = {front(c).lower() for c in commanders}
+    w = taxonomy.get("weights", {"strong": 2, "weak": 1})
+    ws, ww = w.get("strong", 2), w.get("weak", 1)
+    min_strong = taxonomy.get("min_strong", 2)
+    min_cards = taxonomy["min_cards"]
     hits = {}
     for theme, spec in taxonomy["themes"].items():
-        pat = re.compile("|".join(spec["detect"]), re.IGNORECASE)
-        matched = [c["name"] for c in cards if pat.search(c["text"])]
-        cmdr_hit = any(front(c["name"]).lower() in cmdr_keys
-                       and pat.search(c["text"]) for c in cards)
-        if matched:
-            hits[theme] = (matched, cmdr_hit)
-    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
-    ranked = [(t, m, ch) for t, (m, ch) in ranked
-              if len(m) >= (1 if ch else taxonomy["min_cards"])]
+        weighted = "strong" in spec or "weak" in spec
+        if weighted:
+            strong_pat = re.compile("|".join(spec.get("strong", [])) or "(?!)", re.IGNORECASE)
+            weak_pat = re.compile("|".join(spec.get("weak", [])) or "(?!)", re.IGNORECASE)
+        else:
+            pat = re.compile("|".join(spec["detect"]), re.IGNORECASE)
+        matched, strong_n, weak_n, cmdr_hit = [], 0, 0, False
+        for c in cards:
+            is_cmdr_card = front(c["name"]).lower() in cmdr_keys
+            if weighted:
+                if strong_pat.search(c["text"]):
+                    strong_n += 1
+                elif weak_pat.search(c["text"]):
+                    weak_n += 1
+                else:
+                    continue
+            elif not pat.search(c["text"]):
+                continue
+            matched.append(c["name"])
+            cmdr_hit = cmdr_hit or is_cmdr_card
+        if weighted:
+            score = strong_n * ws + weak_n * ww
+            ok = matched and (cmdr_hit or (strong_n >= min_strong and score >= min_cards))
+        else:
+            score = len(matched)
+            ok = len(matched) >= (1 if cmdr_hit else min_cards)
+        if ok:
+            hits[theme] = (matched, cmdr_hit, score)
+    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -kv[1][2]))
+    ranked = [(t, m, ch) for t, (m, ch, _score) in ranked]
     ranked = ranked[:taxonomy["max_themes"] + 1]
 
     trib = taxonomy["tribal"]

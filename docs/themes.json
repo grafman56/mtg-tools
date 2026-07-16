@@ -2,6 +2,8 @@
   "comment": "Theme taxonomy for Deck Forge. 'detect' = case-insensitive regexes run against each card's oracle text (or type line where noted); a card scoring >=1 counts toward the theme. 'payoffs' = Scryfall queries for cards that reward the theme (engines and finishers), run with identity/budget/legality filters appended. Shared by decktool.py and the web UI. 'game_ending' = regex tagging a combo or finisher as table-ending; 'finishers' = named Scryfall queries for finite game-enders. Both are shared by both front-ends too.",
   "min_cards": 5,
   "max_themes": 3,
+  "weights": { "strong": 2, "weak": 1 },
+  "min_strong": 2,
   "game_ending": "wins? the game|loses? the game|damage|life ?loss|mill|poison|infect|combat",
   "finishers": {
     "Alternate win condition": "(o:\"you win the game\") -o:\"can't win\"",
@@ -65,11 +67,20 @@
       ]
     },
     "+1/+1 counters / proliferate": {
-      "detect": [
-        "put (a|one|two|three|x|that many) \\+1/\\+1 counters?",
-        "\\+1/\\+1 counter (on|for) each",
+      "strong": [
         "proliferate",
-        "enters with .{0,20}\\+1/\\+1 counters?"
+        "double the number of .{0,20}counters",
+        "\\+1/\\+1 counter (on|for) each",
+        "put (two|three|four|five|x|that many) \\+1/\\+1 counters",
+        "for each \\+1/\\+1 counter",
+        "counter on each creature you control"
+      ],
+      "weak": [
+        "put a \\+1/\\+1 counter",
+        "enters with .{0,20}\\+1/\\+1 counters?",
+        "connive",
+        "gets? a \\+1/\\+1 counter",
+        "\\+1/\\+1 counter on it"
       ],
       "payoffs": [
         "o:proliferate (t:creature or t:instant or t:sorcery or t:artifact)",
