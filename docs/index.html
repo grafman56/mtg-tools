@@ -48,6 +48,8 @@
   .breakdown summary { color: var(--text); }
   .card-list { color: var(--dim); font-size: 12px; margin: 5px 0 10px;
                line-height: 1.6; }
+  .card-list a { color: var(--accent); text-decoration: none; }
+  .card-list a:hover { text-decoration: underline; }
   .ok { color: var(--good); } .low { color: var(--bad); } .high { color: var(--warn); }
   .combo { background: var(--panel2); border-radius: 8px; padding: 8px 12px;
            margin: 6px 0; font-size: 14px; }
@@ -221,7 +223,7 @@ function oracleOf(c) {
 function categorize(card) {
   const t = card.type_line || "", o = oracleOf(card), ol = o.toLowerCase();
   if (/\bLand\b/.test(t)) return "Lands";
-  if (/add \{|search your library for .* land .*onto the battlefield/i.test(o)
+  if (/add \{|add (one|two|three|x) mana|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast/i.test(o)
       && !/\bCreature\b.*\bAura\b/.test(t)) return "Ramp";
   if (/draw (a|two|three|x|that many) card/.test(ol)) return "Card draw";
   if (/destroy all|exile all|each creature|all creatures/.test(ol)
@@ -463,6 +465,12 @@ async function analyze() {
     // Identity, counts, health
     const deckSet = new Set([...found.keys()]);
     for (const e of entries) deckSet.add(front(e.name).toLowerCase());
+    const cardLink = (name, label = name) => {
+      const card = found.get(front(name).toLowerCase());
+      return card && card.scryfall_uri
+        ? `<a href="${esc(card.scryfall_uri)}" target="_blank" rel="noopener">${esc(label)}</a>`
+        : esc(label);
+    };
     const identSet = new Set();
     const counts = { Lands: 0, Ramp: 0, "Card draw": 0, Interaction: 0, "Board wipes": 0, Other: 0 };
     const classified = Object.fromEntries(Object.keys(counts).map(k => [k, []]));
@@ -474,7 +482,7 @@ async function analyze() {
       (c.color_identity || []).forEach(x => identSet.add(x));
       const category = categorize(c);
       counts[category] += e.qty;
-      classified[category].push(e.qty > 1 ? `${e.qty}× ${c.name}` : c.name);
+      classified[category].push({ name: c.name, qty: e.qty });
     }
     let cmdrCard = null;
     if (commander) {
@@ -501,7 +509,8 @@ async function analyze() {
     for (const category of [...Object.keys(BASELINE), "Other"]) {
       const cards = classified[category];
       h += `<details><summary>${category} (${counts[category]})</summary>
-            <div class="card-list">${cards.length ? cards.map(esc).join(" · ") : "None"}</div></details>`;
+            <div class="card-list">${cards.length ? cards.map(c =>
+              cardLink(c.name, c.qty > 1 ? `${c.qty}× ${c.name}` : c.name)).join(" · ") : "None"}</div></details>`;
     }
     h += `<div id="themeBreakdown"></div></details>`;
     if (scale < 1) h += `<div class="hint">Targets scaled to your ${total}-card pile; a full deck wants ~${BASELINE.Lands} lands, ${BASELINE.Ramp} ramp, ${BASELINE["Card draw"]} draw, ${BASELINE.Interaction} interaction.</div>`;
@@ -536,7 +545,7 @@ async function analyze() {
         breakdown += `<details><summary>${esc(theme)} (${evidence.length})</summary>
           <div class="card-list">${evidence.length ? evidence.map(name => {
             const commanderMatch = cmdrCard && front(name).toLowerCase() === front(cmdrCard.name).toLowerCase();
-            return esc(name) + (commanderMatch ? " (commander)" : "");
+            return cardLink(name, name + (commanderMatch ? " (commander)" : ""));
           }).join(" · ") : "Goal selected; no matching cards currently in the deck."}</div></details>`;
       }
       $("themeBreakdown").innerHTML = breakdown;

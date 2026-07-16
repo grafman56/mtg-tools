@@ -42,6 +42,8 @@ standard Commander baseline, combos in the pile, finite one-card-away combos,
 theme detection, EDHREC synergy picks, and finite finishers under a price cap.
 Both deck-health categories and detected themes have expandable evidence lists,
 so every classification can be checked without cluttering the default view.
+Card names in those lists link to Scryfall using URLs already returned by the
+batched lookup; displaying the links makes no additional network requests.
 
 Run it locally with `python -m http.server 8420 --directory docs` and open
 http://localhost:8420, or just double-click the file. To share, send the file
