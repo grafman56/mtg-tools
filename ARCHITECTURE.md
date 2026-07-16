@@ -253,5 +253,9 @@ snapshotted instead of called live).
 - The browser cannot import from a deck URL directly: Archidekt allows CORS only
   from localhost:3000 and Moxfield blocks outside callers, so the web app is
   paste-based by necessity.
+- Direct URL import remains a TODO, contingent on supported cross-origin API
+  access. In particular, Moxfield's undocumented endpoint is protected by
+  Cloudflare; bypassing that from a static client would be brittle and
+  inappropriate. Plain-text export stays the dependable fallback.
 - Part 2 of the original plan (Forge headless AI-vs-AI simulations to measure
   combo assembly rate and average win turn against a baseline deck) is not built.

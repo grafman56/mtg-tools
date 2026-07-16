@@ -44,6 +44,10 @@
   .stat { background: var(--panel2); border-radius: 8px; padding: 8px 12px; }
   .stat b { font-size: 18px; }
   .stat .target { color: var(--dim); font-size: 12px; }
+  .breakdown { margin-top: 10px; }
+  .breakdown summary { color: var(--text); }
+  .card-list { color: var(--dim); font-size: 12px; margin: 5px 0 10px;
+               line-height: 1.6; }
   .ok { color: var(--good); } .low { color: var(--bad); } .high { color: var(--warn); }
   .combo { background: var(--panel2); border-radius: 8px; padding: 8px 12px;
            margin: 6px 0; font-size: 14px; }
@@ -461,13 +465,16 @@ async function analyze() {
     for (const e of entries) deckSet.add(front(e.name).toLowerCase());
     const identSet = new Set();
     const counts = { Lands: 0, Ramp: 0, "Card draw": 0, Interaction: 0, "Board wipes": 0, Other: 0 };
+    const classified = Object.fromEntries(Object.keys(counts).map(k => [k, []]));
     let total = 0;
     for (const e of entries) {
       const c = found.get(front(e.name).toLowerCase());
       total += e.qty;
       if (!c) continue;
       (c.color_identity || []).forEach(x => identSet.add(x));
-      counts[categorize(c)] += e.qty;
+      const category = categorize(c);
+      counts[category] += e.qty;
+      classified[category].push(e.qty > 1 ? `${e.qty}× ${c.name}` : c.name);
     }
     let cmdrCard = null;
     if (commander) {
@@ -489,6 +496,13 @@ async function analyze() {
             <span class="target">/ ~${want} target${scale < 1 ? " (scaled)" : ""}</span></div>`;
     }
     h += `<div class="stat"><div>Everything else</div><b>${counts.Other}</b></div></div>`;
+    h += `<details class="breakdown"><summary>Show cards counted in each category</summary>`;
+    for (const category of [...Object.keys(BASELINE), "Other"]) {
+      const cards = classified[category];
+      h += `<details><summary>${category} (${counts[category]})</summary>
+            <div class="card-list">${cards.length ? cards.map(esc).join(" · ") : "None"}</div></details>`;
+    }
+    h += `</details>`;
     if (scale < 1) h += `<div class="hint">Targets scaled to your ${total}-card pile; a full deck wants ~${BASELINE.Lands} lands, ${BASELINE.Ramp} ramp, ${BASELINE["Card draw"]} draw, ${BASELINE.Interaction} interaction.</div>`;
     $("health").innerHTML = h;
 

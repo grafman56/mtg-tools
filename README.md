@@ -116,6 +116,11 @@ they illustrate, are in [ARCHITECTURE.md](ARCHITECTURE.md). The short version:
   naming.
 - The web app cannot import from a deck URL: Archidekt allows CORS only from
   localhost:3000 and Moxfield blocks outside callers, so import is paste-based.
+- **TODO — direct deck URL import:** revisit if Archidekt permits this app's
+  origin or Moxfield provides supported noncommercial API access. Moxfield's
+  undocumented deck endpoints currently require Cloudflare clearance and are
+  not a stable foundation for a public static app. Until then, Moxfield's
+  More → Export → Copy for Moxfield/plain text is the reliable workflow.
 
 ## Known limitations / TODO
 
