@@ -44,6 +44,9 @@ Both deck-health categories and detected themes have expandable evidence lists,
 so every classification can be checked without cluttering the default view.
 Card names in those lists link to Scryfall using URLs already returned by the
 batched lookup; displaying the links makes no additional network requests.
+Cards banned in Commander are flagged at the top and beside their names, but
+analysis continues. Functional roles may overlap: for example, a mana rock that
+also draws a card can count as both Ramp and Card draw.
 
 Run it locally with `python -m http.server 8420 --directory docs` and open
 http://localhost:8420, or just double-click the file. To share, send the file

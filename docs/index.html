@@ -60,6 +60,7 @@
   .tag.finite { background: #234631; color: var(--good); }
   .tag.infinite { background: #4a2330; color: var(--bad); }
   .tag.ends { background: #233a56; color: var(--accent); }
+  .tag.banned { background: #4a2330; color: var(--bad); margin-left: 4px; }
   .addcard { font-weight: 600; margin: 12px 0 2px; }
   .addcard .price { color: var(--dim); font-weight: normal; font-size: 13px; }
   details { margin: 6px 0; }
@@ -222,15 +223,17 @@ function oracleOf(c) {
 
 function categorize(card) {
   const t = card.type_line || "", o = oracleOf(card), ol = o.toLowerCase();
-  if (/\bLand\b/.test(t)) return "Lands";
+  if (/\bLand\b/.test(t)) return ["Lands"];
+  const roles = [];
   if (/add \{|add (one|two|three|x) mana|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast/i.test(o)
-      && !/\bCreature\b.*\bAura\b/.test(t)) return "Ramp";
-  if (/draw (a|two|three|x|that many) card/.test(ol)) return "Card draw";
+      && !/\bCreature\b.*\bAura\b/.test(t)) roles.push("Ramp");
+  if (/draw (a|one|two|three|four|five|six|seven|x|\d+|that many) cards?\b|draw cards? equal to/.test(ol))
+    roles.push("Card draw");
   if (/destroy all|exile all|each creature|all creatures/.test(ol)
-      && /destroy|exile|-\d+\/-\d+|sacrifices/.test(ol)) return "Board wipes";
-  if (/(destroy|exile) target|counter target|deals? \d+ damage to (any target|target creature)|gets? -\d+\/-\d+/.test(ol))
-    return "Interaction";
-  return "Other";
+      && /destroy|exile|-\d+\/-\d+|sacrifices/.test(ol)) roles.push("Board wipes");
+  if (/(destroy|exile|counter|return) target|target .{0,35} (gets? -\d+\/-\d+|phases out)|deals? (\d+|x) damage to (any target|target creature)|put target .{0,35} (on the top|on the bottom|into its owner's library)|each opponent sacrifices/.test(ol))
+    roles.push("Interaction");
+  return roles.length ? roles : ["Other"];
 }
 
 // Combo matching runs client-side against a snapshot of Commander
@@ -467,9 +470,11 @@ async function analyze() {
     for (const e of entries) deckSet.add(front(e.name).toLowerCase());
     const cardLink = (name, label = name) => {
       const card = found.get(front(name).toLowerCase());
-      return card && card.scryfall_uri
+      const linked = card && card.scryfall_uri
         ? `<a href="${esc(card.scryfall_uri)}" target="_blank" rel="noopener">${esc(label)}</a>`
         : esc(label);
+      return linked + (card && card.legalities && card.legalities.commander === "banned"
+        ? '<span class="tag banned">banned</span>' : "");
     };
     const identSet = new Set();
     const counts = { Lands: 0, Ramp: 0, "Card draw": 0, Interaction: 0, "Board wipes": 0, Other: 0 };
@@ -480,9 +485,10 @@ async function analyze() {
       total += e.qty;
       if (!c) continue;
       (c.color_identity || []).forEach(x => identSet.add(x));
-      const category = categorize(c);
-      counts[category] += e.qty;
-      classified[category].push({ name: c.name, qty: e.qty });
+      for (const category of categorize(c)) {
+        counts[category] += e.qty;
+        classified[category].push({ name: c.name, qty: e.qty });
+      }
     }
     let cmdrCard = null;
     if (commander) {
@@ -495,6 +501,12 @@ async function analyze() {
     let h = `<h2>Deck health — ${total} cards, identity ${ident}${cmdrCard ? ", commander " + esc(cmdrCard.name) : ""}</h2>`;
     if (corrections.length) h += `<div class="hint">Auto-corrected: ${corrections.map(c => esc(c.from) + " → " + esc(c.to)).join("; ")}</div>`;
     if (missing.length) h += `<div class="err">Not found on Scryfall even with fuzzy matching: ${esc(missing.join(", "))}</div>`;
+    const banned = [...new Map([...found.values()]
+      .filter(c => c.legalities && c.legalities.commander === "banned")
+      .map(c => [c.name, c])).values()];
+    if (banned.length) {
+      h += `<div class="err"><b>Commander banned list:</b> ${banned.map(c => cardLink(c.name)).join(" · ")}. Analysis continues so you can still evaluate the deck.</div>`;
+    }
     h += `<div class="stat-grid">`;
     for (const [cat, base] of Object.entries(BASELINE)) {
       const want = Math.round(base * scale);
