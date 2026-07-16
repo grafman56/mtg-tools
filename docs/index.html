@@ -310,6 +310,13 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
   // decktool.py's detect_themes(); change both together.
   const wts = tax.weights || { strong: 2, weak: 1 };
   const minStrong = tax.min_strong != null ? tax.min_strong : 2;
+  // Count the commander as one of the deck's cards, the way decktool.py does
+  // (its card list includes the commander). Without this, a theme supported
+  // only by the commander -- e.g. Vadrik enabling +1/+1 -- fires on the CLI but
+  // not here. Guard against the commander also appearing in the pasted list.
+  const cmdrKey = cmdrCard ? front(cmdrCard.name).toLowerCase() : null;
+  const cmdrInList = !!(cmdrKey && cardObjs.some(c => front(c.name).toLowerCase() === cmdrKey));
+  const scan = (cmdrCard && !cmdrInList) ? [cmdrCard, ...cardObjs] : cardObjs;
   const hits = {};
   for (const [theme, spec] of Object.entries(tax.themes)) {
     const weighted = !!(spec.strong || spec.weak);
@@ -317,8 +324,8 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
     const weakPat = weighted ? new RegExp((spec.weak || []).join("|") || "(?!)", "i") : null;
     const pat = weighted ? null : new RegExp(spec.detect.join("|"), "i");
     const matched = [];
-    let strongN = 0, weakN = 0;
-    for (const c of cardObjs) {
+    let strongN = 0, weakN = 0, cmdrHit = false;
+    for (const c of scan) {
       const t = oracleOf(c);
       if (weighted) {
         if (strongPat.test(t)) strongN++;
@@ -326,10 +333,8 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
         else continue;
       } else if (!pat.test(t)) continue;
       matched.push(c.name);
+      if (cmdrKey && front(c.name).toLowerCase() === cmdrKey) cmdrHit = true;
     }
-    const ct = cmdrCard ? oracleOf(cmdrCard) : "";
-    const cmdrHit = weighted ? !!(cmdrCard && (strongPat.test(ct) || weakPat.test(ct)))
-                             : !!(cmdrCard && pat.test(ct));
     const isGoal = goalThemes.has(theme);
     const score = weighted ? strongN * wts.strong + weakN * wts.weak : matched.length;
     const fires = isGoal ? true
@@ -349,13 +354,13 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
     // multiplier. Score only gates whether a theme fires. Matches decktool.py.
     .sort((a, b) => (b[1].isGoal - a[1].isGoal) || (b[1].cmdrHit - a[1].cmdrHit)
                     || (b[1].matched.length - a[1].matched.length))
-    .slice(0, tax.max_themes + 2)
+    .slice(0, tax.max_themes + 1)
     .map(([theme, h]) => [theme, h.matched, h.cmdrHit, h.isGoal]);
   // Tribal: most common creature subtype, with a higher bar for types that
   // appear everywhere (Humans, Wizards...).
   const bySub = {};
   let nCreatures = 0;
-  for (const c of cardObjs) {
+  for (const c of scan) {  // scan includes the commander, matching decktool.py
     const { types, subtypes } = typeParts(c);
     if (!types.includes("Creature")) continue;
     nCreatures++;
