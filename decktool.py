@@ -40,11 +40,16 @@ CACHE_DIR = Path(__file__).parent / "cache"
 SPELLBOOK_URL = "https://backend.commanderspellbook.com/find-my-combos"
 UA = "mtg-tools/0.1 (decktool; +https://github.com/grafman56/mtg-tools)"
 
-# Feature names that mean "this actually ends the game".
-GAME_ENDING_PAT = re.compile(
-    r"wins? the game|loses? the game|damage|life loss|lifeloss|mill|poison|infect|combat",
-    re.IGNORECASE,
-)
+# The "this actually ends the game" regex lives in docs/themes.json so the CLI
+# and the web app share one definition. Compiled lazily and cached.
+_GAME_ENDING_PAT = None
+
+
+def game_ending_pat():
+    global _GAME_ENDING_PAT
+    if _GAME_ENDING_PAT is None:
+        _GAME_ENDING_PAT = re.compile(load_themes()["game_ending"], re.IGNORECASE)
+    return _GAME_ENDING_PAT
 
 
 def http_json(url, body=None):
@@ -135,7 +140,7 @@ def combo_summary(combo, deck_names):
         "missing": missing,
         "produces": produces,
         "infinite": any(p.lower().startswith(("infinite", "near-infinite")) for p in produces),
-        "game_ending": any(GAME_ENDING_PAT.search(p) for p in produces),
+        "game_ending": any(game_ending_pat().search(p) for p in produces),
         "description": combo.get("description", ""),
         "popularity": combo.get("popularity") or 0,
         "price": float(price) if price else None,
@@ -231,7 +236,7 @@ def detect_themes(cards, taxonomy, commanders=()):
 def print_themes(deck_name, commanders, main, cards, max_price):
     taxonomy = load_themes()
     ranked, tribal = detect_themes(cards, taxonomy, commanders)
-    ident = commander_identity(commanders) if commanders else "WUBRG"
+    ident = deck_identity(commanders, main)
     deck_names = {front(n).lower() for n in list(main) + commanders}
     print(f"# Theme analysis — {deck_name} ({', '.join(commanders) or 'no commander'})\n")
     if not ranked and not tribal:
@@ -288,25 +293,23 @@ def front(name):
 
 # ---------------------------------------------------------------- finishers
 
-# Buckets of "actually ends the game without going infinite" cards.
-FINISHER_QUERIES = {
-    "Alternate win condition": '(o:"you win the game") -o:"can\'t win"',
-    "Drain the table": 'o:/each opponent loses [X\\d]+ life/',
-    "Burn the table": 'o:/deals [X\\d]+ damage to each opponent/',
-    "Overrun effects": '(t:sorcery or t:instant) o:/creatures you control get \\+[X\\d]/',
-    "Extra combat": 'o:"additional combat phase"',
-    "Mass evasion": "(t:sorcery or t:instant or t:enchantment) "
-                    "(o:\"can't be blocked\" or o:\"gain flying until\") "
-                    'o:"creatures you control"',
-}
+# Finisher buckets (named Scryfall queries for finite game-enders) live in
+# docs/themes.json, shared with the web app; read via load_themes()["finishers"].
 
 
-def commander_identity(commanders):
+def deck_identity(commanders, main):
+    """Color identity for suggestion filters. Uses the commander(s) when
+    present; otherwise infers it from the whole pile, the way the web app
+    does, so `themes` and `finishers` agree on a commander-less list instead
+    of defaulting to WUBRG and colorless respectively."""
     ident = set()
-    for name in commanders:
-        card = http_json("https://api.scryfall.com/cards/named?exact="
-                         + urllib.parse.quote(name))
-        ident.update(card.get("color_identity", []))
+    names = list(commanders) if commanders else list(main)
+    for i in range(0, len(names), 75):
+        batch = names[i:i + 75]
+        resp = http_json("https://api.scryfall.com/cards/collection",
+                         {"identifiers": [{"name": front(n)} for n in batch]})
+        for c in resp.get("data", []):
+            ident.update(c.get("color_identity", []))
     return "".join(c for c in "WUBRG" if c in ident) or "C"
 
 
@@ -322,12 +325,12 @@ def scryfall_search(query):
 
 
 def print_finishers(deck_name, commanders, main, max_price):
-    ident = commander_identity(commanders)
+    ident = deck_identity(commanders, main)
     deck_names = set(main) | set(commanders)
     deck_names |= {n.split("//")[0].strip() for n in deck_names}
     print(f"# Finisher suggestions for {deck_name} "
           f"({', '.join(commanders)} — identity {ident})\n")
-    for bucket, q in FINISHER_QUERIES.items():
+    for bucket, q in load_themes()["finishers"].items():
         full_q = f"({q}) id<={ident} legal:commander usd<={max_price:g}"
         cards = scryfall_search(full_q)
         fresh = [c for c in cards
@@ -342,7 +345,7 @@ def print_finishers(deck_name, commanders, main, max_price):
             line1 = (c.get("oracle_text") or
                      " // ".join(f.get("oracle_text", "")
                                  for f in c.get("card_faces", []))).split("\n")
-            text = next((l for l in line1 if GAME_ENDING_PAT.search(l)
+            text = next((l for l in line1 if game_ending_pat().search(l)
                          or "win the game" in l.lower()), line1[0] if line1 else "")
             print(f"  - {c['name']} ({c.get('mana_cost', '?')}){pricestr}")
             print(f"      {text[:150]}")

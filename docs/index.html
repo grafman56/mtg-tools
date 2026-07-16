@@ -120,15 +120,10 @@ const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const front = n => n.split("//")[0].trim();
 
-const GAME_ENDING = /wins? the game|loses? the game|damage|life loss|mill|poison|infect|combat/i;
-const FINISHER_BUCKETS = {
-  "Alternate win condition": '(o:"you win the game") -o:"can\'t win"',
-  "Drain the table": 'o:/each opponent loses [X\\d]+ life/',
-  "Burn the table": 'o:/deals [X\\d]+ damage to each opponent/',
-  "Overrun / go wide": '(t:sorcery or t:instant) o:/creatures you control get \\+[X\\d]/',
-  "Extra combat": 'o:"additional combat phase"',
-  "Mass evasion": '(t:sorcery or t:instant or t:enchantment) (o:"can\'t be blocked" or o:"gain flying until") o:"creatures you control"',
-};
+// The "ends the game" test and the finisher buckets both come from themes.json
+// now, shared with the CLI so the two front-ends can't drift. GAME_ENDING is
+// compiled in loadThemes(); finisher buckets are read as tax.finishers.
+let GAME_ENDING = null;
 // Commander deck baseline (per ~99 cards) — scaled down for theme piles.
 const BASELINE = { Lands: 37, Ramp: 10, "Card draw": 10, Interaction: 10, "Board wipes": 3 };
 
@@ -289,6 +284,7 @@ async function loadThemes() {
   const r = await fetch("themes.json");
   if (!r.ok) throw new Error("couldn't load themes.json: " + r.status);
   THEMES = await r.json();
+  GAME_ENDING = new RegExp(THEMES.game_ending, "i");
   return THEMES;
 }
 
@@ -585,7 +581,7 @@ async function analyze() {
     // Finishers
     let fh = `<h2>Finite finishers to close games (identity ${ident}, under $${maxPrice}, EDHREC-ranked)</h2>`;
     $("finishers").innerHTML = fh;
-    for (const [bucket, q] of Object.entries(FINISHER_BUCKETS)) {
+    for (const [bucket, q] of Object.entries(tax.finishers)) {
       status(`Searching finishers: ${bucket}…`);
       const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
       const fresh = cards.filter(c => !deckSet.has(front(c.name).toLowerCase())).slice(0, 6);

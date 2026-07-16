@@ -1,7 +1,16 @@
 {
-  "comment": "Theme taxonomy for Deck Forge. 'detect' = case-insensitive regexes run against each card's oracle text (or type line where noted); a card scoring >=1 counts toward the theme. 'payoffs' = Scryfall queries for cards that reward the theme (engines and finishers), run with identity/budget/legality filters appended. Shared by decktool.py and the web UI.",
+  "comment": "Theme taxonomy for Deck Forge. 'detect' = case-insensitive regexes run against each card's oracle text (or type line where noted); a card scoring >=1 counts toward the theme. 'payoffs' = Scryfall queries for cards that reward the theme (engines and finishers), run with identity/budget/legality filters appended. Shared by decktool.py and the web UI. 'game_ending' = regex tagging a combo or finisher as table-ending; 'finishers' = named Scryfall queries for finite game-enders. Both are shared by both front-ends too.",
   "min_cards": 5,
   "max_themes": 3,
+  "game_ending": "wins? the game|loses? the game|damage|life ?loss|mill|poison|infect|combat",
+  "finishers": {
+    "Alternate win condition": "(o:\"you win the game\") -o:\"can't win\"",
+    "Drain the table": "o:/each opponent loses [X\\d]+ life/",
+    "Burn the table": "o:/deals [X\\d]+ damage to each opponent/",
+    "Overrun effects": "(t:sorcery or t:instant) o:/creatures you control get \\+[X\\d]/",
+    "Extra combat": "o:\"additional combat phase\"",
+    "Mass evasion": "(t:sorcery or t:instant or t:enchantment) (o:\"can't be blocked\" or o:\"gain flying until\") o:\"creatures you control\""
+  },
   "themes": {
     "Sacrifice / aristocrats": {
       "detect": [
