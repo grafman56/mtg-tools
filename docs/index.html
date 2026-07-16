@@ -328,15 +328,34 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex = {}
   }
   const hits = {};
   for (const [theme, spec] of Object.entries(tax.themes)) {
-    const pat = new RegExp(spec.detect.join("|"), "i");
-    const matched = cardObjs.filter(c => pat.test(oracleOf(c)) ||
-      (tagIndex[front(c.name).toLowerCase()] || []).includes(theme)).map(c => c.name);
+    const weighted = !!(spec.strong || spec.weak);
+    const strongPat = new RegExp((spec.strong || ["(?!x)x"]).join("|"), "i");
+    const weakPat = new RegExp((spec.weak || ["(?!x)x"]).join("|"), "i");
+    const pat = weighted ? null : new RegExp(spec.detect.join("|"), "i");
+    let strongN = 0, weakN = 0;
+    const matched = cardObjs.filter(c => {
+      const text = oracleOf(c);
+      const taggedCard = (tagIndex[front(c.name).toLowerCase()] || []).includes(theme);
+      const strong = weighted && strongPat.test(text);
+      const weak = weighted && !strong && weakPat.test(text);
+      const legacy = !weighted && pat.test(text);
+      if (!(taggedCard || strong || weak || legacy)) return false;
+      if (taggedCard || strong) strongN++; else weakN++;
+      return true;
+    }).map(c => c.name);
     const commanderTags = cmdrCard ? (tagIndex[front(cmdrCard.name).toLowerCase()] || []) : [];
     const tagged = commanderTags.includes(theme);
-    const cmdrHit = tagged || !!(cmdrCard && pat.test(oracleOf(cmdrCard)));
+    const commanderText = cmdrCard ? oracleOf(cmdrCard) : "";
+    const cmdrHit = tagged || !!(cmdrCard && (weighted
+      ? (strongPat.test(commanderText) || weakPat.test(commanderText))
+      : pat.test(commanderText)));
     const isGoal = goalThemes.has(theme);
-    const bar = (isGoal || tagged) ? 0 : (cmdrHit ? 1 : tax.min_cards);
-    if (matched.length >= bar && (matched.length || isGoal || tagged)) {
+    const w = tax.weights || { strong: 2, weak: 1, commander_bonus: 3 };
+    const score = strongN * w.strong + weakN * w.weak + (cmdrHit ? w.commander_bonus : 0);
+    const qualifies = weighted
+      ? (cmdrHit && matched.length || (strongN >= (tax.min_strong || 2) && score >= tax.min_cards))
+      : (matched.length >= ((isGoal || tagged) ? 0 : (cmdrHit ? 1 : tax.min_cards)));
+    if (qualifies && (matched.length || isGoal || tagged)) {
       hits[theme] = { matched, cmdrHit, isGoal };
     } else if (isGoal) {
       hits[theme] = { matched: [], cmdrHit, isGoal };
@@ -515,9 +534,9 @@ async function analyze() {
       h += `<div class="stat"><div>${cat}</div><b class="${cls}">${have}</b>
             <span class="target">/ ~${want} target${scale < 1 ? " (scaled)" : ""}</span></div>`;
     }
-    h += `<div class="stat"><div>Everything else</div><b>${counts.Other}</b></div></div>`;
+    h += `<div class="stat"><div>Other functional roles</div><b>${counts.Other}</b></div></div>`;
     h += `<details class="breakdown"><summary>Deck breakdown — show classified cards</summary>`;
-    h += `<div class="hint">Functional categories</div>`;
+    h += `<div class="hint">Functional categories — “Other” means the card is not basic ramp/draw/removal; it may still be core theme evidence below.</div>`;
     for (const category of [...Object.keys(BASELINE), "Other"]) {
       const cards = classified[category];
       h += `<details><summary>${category} (${counts[category]})</summary>

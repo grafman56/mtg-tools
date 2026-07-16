@@ -47,6 +47,11 @@ batched lookup; displaying the links makes no additional network requests.
 Cards banned in Commander are flagged at the top and beside their names, but
 analysis continues. Functional roles may overlap: for example, a mana rock that
 also draws a card can count as both Ramp and Card draw.
+“Other functional roles” does not mean off-theme: death payoffs, copy targets,
+and similar build-around cards are listed under their detected themes below the
+basic ramp/draw/removal audit. Commander-enabled mechanics receive extra theme
+weight, while incidental self-sacrifice wording alone cannot establish an
+aristocrats theme.
 
 Run it locally with `python -m http.server 8420 --directory docs` and open
 http://localhost:8420, or just double-click the file. To share, send the file

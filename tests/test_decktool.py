@@ -58,6 +58,27 @@ class ThemeTests(unittest.TestCase):
         ranked, _ = decktool.detect_themes(cards, self.taxonomy)
         self.assertNotIn("Treasure / artifact tokens", {row[0] for row in ranked})
 
+    def test_named_and_general_death_triggers_support_aristocrats(self):
+        cards = [
+            {"name": "Death Payoff", "text": "Whenever one or more other creatures die, draw a card.",
+             "types": ["Creature"], "subtypes": []},
+            {"name": "Named Dragon", "text": "When Named Dragon dies, each opponent loses 5 life.",
+             "types": ["Creature"], "subtypes": ["Dragon"]},
+            {"name": "Commander Outlet", "text": "Sacrifice another creature: This becomes a copy of it.",
+             "types": ["Creature"], "subtypes": []},
+        ]
+        ranked, _ = decktool.detect_themes(cards, self.taxonomy, ["Commander Outlet"])
+        aristocrats = next(row for row in ranked if row[0] == "Sacrifice / aristocrats")
+        self.assertTrue(aristocrats[2])
+        self.assertEqual(set(aristocrats[1]), {c["name"] for c in cards})
+
+    def test_weak_self_sacrifice_alone_does_not_invent_theme(self):
+        cards = [{"name": f"Temporary {i}",
+                  "text": "Sacrifice it at the beginning of the next end step.",
+                  "types": ["Creature"], "subtypes": []} for i in range(8)]
+        ranked, _ = decktool.detect_themes(cards, self.taxonomy)
+        self.assertNotIn("Sacrifice / aristocrats", {row[0] for row in ranked})
+
     def test_configured_theme_cap_is_enforced(self):
         cards = [{"name": f"Card {i}",
                   "text": "Create a Treasure token. You gain 2 life. Landfall. "

@@ -202,22 +202,44 @@ def detect_themes(cards, taxonomy, commanders=(), tagged_themes=(), tag_index=No
     cmdr_keys = {front(c).lower() for c in commanders}
     tagged_themes = set(tagged_themes)
     tag_index = tag_index or {}
+    weights = taxonomy.get("weights", {"strong": 2, "weak": 1,
+                                        "commander_bonus": 3})
     hits = {}
     for theme, spec in taxonomy["themes"].items():
-        pat = re.compile("|".join(spec["detect"]), re.IGNORECASE)
+        weighted = "strong" in spec or "weak" in spec
+        strong_pat = re.compile("|".join(spec.get("strong", [])) or "(?!x)x",
+                                re.IGNORECASE)
+        weak_pat = re.compile("|".join(spec.get("weak", [])) or "(?!x)x",
+                              re.IGNORECASE)
+        pat = None if weighted else re.compile("|".join(spec["detect"]), re.IGNORECASE)
         tagged_names = {name.lower() for name, themes in tag_index.items()
                         if theme in themes}
-        matched = [c["name"] for c in cards
-                   if pat.search(c["text"]) or front(c["name"]).lower() in tagged_names]
-        cmdr_hit = (theme in tagged_themes or
-                    any(front(c["name"]).lower() in cmdr_keys
-                        and pat.search(c["text"]) for c in cards))
-        if matched or cmdr_hit:
+        matched, strong_n, weak_n, cmdr_hit = [], 0, 0, theme in tagged_themes
+        for c in cards:
+            text, name = c["text"], c["name"]
+            tagged = front(name).lower() in tagged_names
+            strong = weighted and bool(strong_pat.search(text))
+            weak = weighted and not strong and bool(weak_pat.search(text))
+            legacy = not weighted and bool(pat.search(text))
+            if not (tagged or strong or weak or legacy):
+                continue
+            matched.append(name)
+            strong_n += int(strong or tagged)
+            weak_n += int(weak or legacy)
+            cmdr_hit = cmdr_hit or front(name).lower() in cmdr_keys
+        score = (strong_n * weights["strong"] + weak_n * weights["weak"] +
+                 (weights.get("commander_bonus", 3) if cmdr_hit else 0))
+        if weighted:
+            qualifies = (cmdr_hit and bool(matched)) or (
+                strong_n >= taxonomy.get("min_strong", 2) and
+                score >= taxonomy["min_cards"])
+        else:
+            qualifies = len(matched) >= (0 if theme in tagged_themes else
+                                        (1 if cmdr_hit else taxonomy["min_cards"]))
+        if qualifies:
             hits[theme] = (matched, cmdr_hit)
     ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
-    ranked = [(t, m, ch) for t, (m, ch) in ranked
-              if len(m) >= (0 if t in tagged_themes else
-                            (1 if ch else taxonomy["min_cards"]))]
+    ranked = [(t, m, ch) for t, (m, ch) in ranked]
     ranked = ranked[:taxonomy["max_themes"]]
 
     trib = taxonomy["tribal"]

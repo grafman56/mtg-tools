@@ -1,16 +1,24 @@
 {
   "comment": "Theme taxonomy for Deck Forge. 'detect' = case-insensitive regexes run against each card's oracle text (or type line where noted); a card scoring >=1 counts toward the theme. 'payoffs' = Scryfall queries for cards that reward the theme (engines and finishers), run with identity/budget/legality filters appended. Shared by decktool.py and the web UI.",
   "min_cards": 5,
+  "weights": { "strong": 2, "weak": 1, "commander_bonus": 3 },
+  "min_strong": 2,
   "max_themes": 3,
   "themes": {
     "Sacrifice / aristocrats": {
-      "detect": [
-        "sacrifice a creature",
-        "sacrifice another creature",
-        "whenever (a|another) creature( you control)? dies",
-        "when(ever)? this creature dies",
-        "dies, (create|draw|each|put|return)",
-        "sacrifice a permanent"
+      "strong": [
+        "sacrifice (a|another) (creature|permanent)",
+        "whenever .{0,45}(creature|permanent).{0,25} (dies|is sacrificed)",
+        "whenever (one or more|a player).{0,35}(creatures? die|sacrifices)",
+        "when [^.!?]{0,45} dies",
+        "if .{0,35} would die",
+        "dies, (create|draw|each|put|return|gain|target)",
+        "undying|persist"
+      ],
+      "weak": [
+        "sacrifice (it|this creature|this permanent|them)",
+        "as an additional cost.{0,30}sacrifice",
+        "it's sacrificed|sacrifice (it|them) at"
       ],
       "payoffs": [
         "o:/whenever (a|another) creature( you control)? dies/ (o:\"loses\" or o:\"damage\" or o:\"drain\")",
