@@ -292,6 +292,16 @@ async function loadThemes() {
   return THEMES;
 }
 
+let THEME_TAGS = null;
+async function loadThemeTags() {
+  if (THEME_TAGS) return THEME_TAGS;
+  try {
+    const r = await fetch("theme-tags.json");
+    THEME_TAGS = r.ok ? (await r.json()).cards : {};
+  } catch (_) { THEME_TAGS = {}; }
+  return THEME_TAGS;
+}
+
 function typeParts(card) {
   const tl = (card.type_line || "").split("//")[0];
   const [types, subs] = tl.split("—").map(s => (s || "").trim());
@@ -299,7 +309,7 @@ function typeParts(card) {
            subtypes: subs ? subs.split(/\s+/) : [] };
 }
 
-function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
+function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex = {}) {
   // Themes the user typed as a goal or ticked are forced in; themes the
   // commander's own text matches get a lower support bar.
   const goal = (goalText || "").toLowerCase();
@@ -310,11 +320,14 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
   const hits = {};
   for (const [theme, spec] of Object.entries(tax.themes)) {
     const pat = new RegExp(spec.detect.join("|"), "i");
-    const matched = cardObjs.filter(c => pat.test(oracleOf(c))).map(c => c.name);
-    const cmdrHit = !!(cmdrCard && pat.test(oracleOf(cmdrCard)));
+    const matched = cardObjs.filter(c => pat.test(oracleOf(c)) ||
+      (tagIndex[front(c.name).toLowerCase()] || []).includes(theme)).map(c => c.name);
+    const commanderTags = cmdrCard ? (tagIndex[front(cmdrCard.name).toLowerCase()] || []) : [];
+    const tagged = commanderTags.includes(theme);
+    const cmdrHit = tagged || !!(cmdrCard && pat.test(oracleOf(cmdrCard)));
     const isGoal = goalThemes.has(theme);
-    const bar = isGoal ? 0 : (cmdrHit ? 1 : tax.min_cards);
-    if (matched.length >= bar && (matched.length || isGoal)) {
+    const bar = (isGoal || tagged) ? 0 : (cmdrHit ? 1 : tax.min_cards);
+    if (matched.length >= bar && (matched.length || isGoal || tagged)) {
       hits[theme] = { matched, cmdrHit, isGoal };
     } else if (isGoal) {
       hits[theme] = { matched: [], cmdrHit, isGoal };
@@ -323,7 +336,7 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced) {
   const ranked = Object.entries(hits)
     .sort((a, b) => (b[1].isGoal - a[1].isGoal) || (b[1].cmdrHit - a[1].cmdrHit)
                     || (b[1].matched.length - a[1].matched.length))
-    .slice(0, tax.max_themes + 2)
+    .slice(0, tax.max_themes)
     .map(([theme, h]) => [theme, h.matched, h.cmdrHit, h.isGoal]);
   // Tribal: most common creature subtype, with a higher bar for types that
   // appear everywhere (Humans, Wizards...).
@@ -404,11 +417,16 @@ async function edhrecSynergy(commanderName, deckSet) {
 }
 
 async function scryfallSearch(q, status) {
-  const r = await fetch("https://api.scryfall.com/cards/search?order=edhrec&unique=cards&q="
-                        + encodeURIComponent(q));
-  if (r.status === 404) return [];
-  if (!r.ok) throw new Error("Scryfall search failed: " + r.status);
-  return (await r.json()).data;
+  try {
+    const r = await fetch("https://api.scryfall.com/cards/search?order=edhrec&unique=cards&q="
+                          + encodeURIComponent(q), { signal: AbortSignal.timeout(12000) });
+    if (r.status === 404 || r.status === 429) return [];
+    if (!r.ok) throw new Error("Scryfall search failed: " + r.status);
+    return (await r.json()).data;
+  } catch (e) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") return [];
+    throw e;
+  }
 }
 
 async function analyze() {
@@ -482,8 +500,9 @@ async function analyze() {
     const goalText = $("goal").value.trim();
     const forced = [...document.querySelectorAll("#themeChecks input:checked")]
       .map(cb => cb.value);
+    const tagIndex = await loadThemeTags();
     const { ranked: themesRanked, tribal } =
-      detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced);
+      detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex);
     let th = `<h2>Themes in this pile — suggestions that fit what it's doing</h2>`;
     if (!themesRanked.length && !tribal) {
       th += `<div class="hint">No dominant theme yet (needs ${tax.min_cards}+ cards pulling the same direction) — the finishers below are generic to your colors.</div>`;
@@ -504,7 +523,8 @@ async function analyze() {
         $("themes").innerHTML = th;
       }
       const jobs = themesRanked.map(([t, m, cm, gl]) =>
-        [t, m, tax.themes[t].payoffs, cm, gl]);
+        [t, m, [...(tax.themes[t].oracle_tags || []).map(tag => `otag:${tag}`),
+                ...tax.themes[t].payoffs], cm, gl]);
       if (tribal) {
         jobs.push([`${tribal[0]} tribal`, tribal[1],
                    tax.tribal.payoffs.map(q => q.split("{TYPE}").join(tribal[0])),

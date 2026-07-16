@@ -1,4 +1,6 @@
 cache/
+__pycache__/
+*.py[cod]
 *_raw.json
 report_*.txt
 finishers_*.txt

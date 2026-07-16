@@ -84,8 +84,13 @@ they illustrate, are in [ARCHITECTURE.md](ARCHITECTURE.md). The short version:
 ## Data files
 
 - `docs/themes.json` — theme taxonomy: per-theme detection regexes and payoff
-  Scryfall queries, plus tribal thresholds, theme intersections, and goal
+  Scryfall queries/Oracle Tags, plus tribal thresholds, theme intersections, and goal
   keywords. Edit this to add or tune a theme; both front-ends pick it up.
+- `docs/theme-tags.json` — optional generated Oracle Tag index. It lets both
+  front-ends use Scryfall's community-maintained semantic labels as a second
+  detection signal without making tag searches during every analysis. Refresh
+  it politely with `python scripts/build_theme_tags.py`; if it is absent, the
+  rules-text detector continues to work normally.
 - `docs/combos.json` — compact Commander Spellbook snapshot, built by
   `scripts/build_combo_db.py`. Refresh occasionally:
 
@@ -94,10 +99,17 @@ they illustrate, are in [ARCHITECTURE.md](ARCHITECTURE.md). The short version:
   python scripts/build_combo_db.py variants.json
   ```
 
+  Scryfall limits API traffic; do not repeatedly run the tag refresh after a
+  429 response. Let the limit clear and try once later.
+
 ## Gotchas worth knowing
 
 - Scryfall requires **both** a `User-Agent` and an `Accept` header, or it returns
   400.
+- A full deck lookup is batched at 75 names per Scryfall collection request
+  (normally two requests for Commander), never one request per card. Optional
+  recommendation searches time out/fail soft so a slow API cannot hold the
+  entire analysis open indefinitely.
 - Archidekt categories flagged `includedInDeck: false` (Maybeboard, Sideboard)
   are excluded from the mainboard.
 - Double-faced card names are split on `//` to match Spellbook's front-face

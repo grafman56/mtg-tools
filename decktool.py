@@ -53,7 +53,7 @@ def http_json(url, body=None):
     if data:
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(req, timeout=90) as r:
+    with urllib.request.urlopen(req, timeout=15) as r:
         return json.load(r)
 
 
@@ -81,7 +81,7 @@ def fetch_archidekt(deck_id):
     for entry in d["cards"]:
         cats = entry.get("categories") or []
         name = entry["card"]["oracleCard"]["name"]
-        if cats and cats[0] in excluded:
+        if any(cat in excluded for cat in cats):
             continue
         if "Commander" in cats:
             commanders.append(name)
@@ -151,6 +151,11 @@ def load_themes():
                       .read_text(encoding="utf-8"))
 
 
+def load_theme_tags():
+    path = Path(__file__).parent / "docs" / "theme-tags.json"
+    return json.loads(path.read_text(encoding="utf-8"))["cards"] if path.exists() else {}
+
+
 def deck_card_data(arg, commanders, main):
     """Return per-card data [{name, qty, text, types, subtypes}] for the deck.
     Archidekt decks carry oracle text already; text lists go through Scryfall."""
@@ -164,7 +169,7 @@ def deck_card_data(arg, commanders, main):
         out = []
         for entry in raw["cards"]:
             cats = entry.get("categories") or []
-            if cats and cats[0] in excluded:
+            if any(cat in excluded for cat in cats):
                 continue
             oc = entry["card"]["oracleCard"]
             out.append({"name": oc["name"], "qty": entry["quantity"],
@@ -190,23 +195,30 @@ def deck_card_data(arg, commanders, main):
     return out
 
 
-def detect_themes(cards, taxonomy, commanders=()):
+def detect_themes(cards, taxonomy, commanders=(), tagged_themes=(), tag_index=None):
     """Return ([(theme, [card names], is_cmdr_theme)...], tribal info or None).
     Themes the commander's own text matches are the build-around signal and
     are always surfaced (with a lower support threshold)."""
     cmdr_keys = {front(c).lower() for c in commanders}
+    tagged_themes = set(tagged_themes)
+    tag_index = tag_index or {}
     hits = {}
     for theme, spec in taxonomy["themes"].items():
         pat = re.compile("|".join(spec["detect"]), re.IGNORECASE)
-        matched = [c["name"] for c in cards if pat.search(c["text"])]
-        cmdr_hit = any(front(c["name"]).lower() in cmdr_keys
-                       and pat.search(c["text"]) for c in cards)
-        if matched:
+        tagged_names = {name.lower() for name, themes in tag_index.items()
+                        if theme in themes}
+        matched = [c["name"] for c in cards
+                   if pat.search(c["text"]) or front(c["name"]).lower() in tagged_names]
+        cmdr_hit = (theme in tagged_themes or
+                    any(front(c["name"]).lower() in cmdr_keys
+                        and pat.search(c["text"]) for c in cards))
+        if matched or cmdr_hit:
             hits[theme] = (matched, cmdr_hit)
     ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
     ranked = [(t, m, ch) for t, (m, ch) in ranked
-              if len(m) >= (1 if ch else taxonomy["min_cards"])]
-    ranked = ranked[:taxonomy["max_themes"] + 1]
+              if len(m) >= (0 if t in tagged_themes else
+                            (1 if ch else taxonomy["min_cards"]))]
+    ranked = ranked[:taxonomy["max_themes"]]
 
     trib = taxonomy["tribal"]
     creature_subtypes = {}
@@ -230,7 +242,9 @@ def detect_themes(cards, taxonomy, commanders=()):
 
 def print_themes(deck_name, commanders, main, cards, max_price):
     taxonomy = load_themes()
-    ranked, tribal = detect_themes(cards, taxonomy, commanders)
+    tag_index = load_theme_tags()
+    tagged = set(tag_index.get(front(commanders[0]).lower(), [])) if commanders else set()
+    ranked, tribal = detect_themes(cards, taxonomy, commanders, tagged, tag_index)
     ident = commander_identity(commanders) if commanders else "WUBRG"
     deck_names = {front(n).lower() for n in list(main) + commanders}
     print(f"# Theme analysis — {deck_name} ({', '.join(commanders) or 'no commander'})\n")
@@ -249,7 +263,9 @@ def print_themes(deck_name, commanders, main, cards, max_price):
         flag = " [commander theme]" if cmdr_hit else ""
         print(f"## {theme}{flag} — {len(matched)} cards")
         print(f"   e.g. {', '.join(matched[:6])}")
-        queries = taxonomy["themes"][theme]["payoffs"]
+        spec = taxonomy["themes"][theme]
+        queries = [f"otag:{tag}" for tag in spec.get("oracle_tags", [])]
+        queries += spec["payoffs"]
         _suggest(queries, ident, max_price, deck_names)
     if tribal:
         ttype, members = tribal
@@ -260,26 +276,35 @@ def print_themes(deck_name, commanders, main, cards, max_price):
 
 
 def _suggest(queries, ident, max_price, deck_names, limit=8):
-    seen, shown = set(), 0
+    for c in suggestion_cards(queries, ident, max_price, deck_names, limit):
+        price = c.get("prices", {}).get("usd")
+        text = (c.get("oracle_text")
+                or " // ".join(f.get("oracle_text", "")
+                               for f in c.get("card_faces", []))).replace("\n", " ")
+        print(f"   + {c['name']} ({c.get('mana_cost', '?')})"
+              f"{' $' + price if price else ''}")
+        print(f"       {text[:140]}")
+    print()
+
+
+def suggestion_cards(queries, ident, max_price, deck_names, limit=8):
+    """Return unique, unowned suggestions, stopping as soon as limit is met."""
+    seen, out = set(), []
     for q in queries:
         full = f"({q}) id<={ident} legal:commander usd<={max_price:g}"
-        for c in scryfall_search(full):
+        try:
+            results = scryfall_search(full)
+        except (TimeoutError, urllib.error.URLError):
+            break  # suggestions are optional; return what we have promptly
+        for c in results:
             key = front(c["name"]).lower()
             if key in deck_names or key in seen:
                 continue
             seen.add(key)
-            price = c.get("prices", {}).get("usd")
-            text = (c.get("oracle_text")
-                    or " // ".join(f.get("oracle_text", "")
-                                   for f in c.get("card_faces", []))).replace("\n", " ")
-            print(f"   + {c['name']} ({c.get('mana_cost', '?')})"
-                  f"{' $' + price if price else ''}")
-            print(f"       {text[:140]}")
-            shown += 1
-            if shown >= limit:
-                print()
-                return
-    print()
+            out.append(c)
+            if len(out) >= limit:
+                return out
+    return out
 
 
 def front(name):

@@ -19,6 +19,7 @@
       ]
     },
     "Blink / ETB value": {
+      "oracle_tags": ["blink"],
       "detect": [
         "exile .{0,40}, then return (it|that card|them) to the battlefield",
         "return (it|them) to the battlefield",
@@ -109,6 +110,7 @@
       ]
     },
     "Theft / mind control": {
+      "oracle_tags": ["theft"],
       "detect": [
         "gain control of (target|that|all|each|another|an opponent's)",
         "gains? control of (it|them)",
@@ -123,6 +125,7 @@
       ]
     },
     "Exile / impulse draw": {
+      "oracle_tags": ["impulse-draw"],
       "detect": [
         "exile the top (card|two cards|three cards|x cards) of your library",
         "you may (play|cast) (that card|it|them|those cards)",
@@ -163,6 +166,7 @@
       ]
     },
     "Lifegain": {
+      "oracle_tags": ["lifegain"],
       "detect": [
         "you gain (\\d+|x|that much) life",
         "whenever you gain life",
@@ -187,6 +191,7 @@
       ]
     },
     "Landfall / lands matter": {
+      "oracle_tags": ["landfall"],
       "detect": [
         "landfall",
         "whenever a land (you control )?enters",
