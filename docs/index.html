@@ -549,8 +549,19 @@ async function analyze() {
         const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet);
         const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
           + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");
+        const evidence = [...matched];
+        if (cmdrHit && cmdrCard && !evidence.some(n => front(n).toLowerCase() === front(cmdrCard.name).toLowerCase())) {
+          evidence.unshift(cmdrCard.name);
+        }
         th += `<div class="pill-row"><b>${esc(theme)}</b>${tags}
-               <span class="pill">${matched.length ? matched.length + " cards, e.g. " + esc(matched.slice(0, 4).join(", ")) : "not in the pile yet — building toward it"}</span></div>`;
+               <span class="pill">${evidence.length ? evidence.length + " matching cards" : "not in the pile yet — building toward it"}</span></div>`;
+        if (evidence.length) {
+          th += `<details class="breakdown"><summary>Why this theme? Show matching cards</summary>
+                 <div class="card-list">${evidence.map(name => {
+                   const commander = cmdrCard && front(name).toLowerCase() === front(cmdrCard.name).toLowerCase();
+                   return esc(name) + (commander ? " (commander)" : "");
+                 }).join(" · ")}</div></details>`;
+        }
         th += sugg.length ? sugg.map(finisherCardHtml).join("")
                           : `<div class="hint">nothing new in identity/budget</div>`;
         $("themes").innerHTML = th;

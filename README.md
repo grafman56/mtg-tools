@@ -40,6 +40,8 @@ One self-contained HTML file, no backend. Paste any pile of cards (a theme seed
 or a full deck) and an optional commander, and it shows deck health against a
 standard Commander baseline, combos in the pile, finite one-card-away combos,
 theme detection, EDHREC synergy picks, and finite finishers under a price cap.
+Both deck-health categories and detected themes have expandable evidence lists,
+so every classification can be checked without cluttering the default view.
 
 Run it locally with `python -m http.server 8420 --directory docs` and open
 http://localhost:8420, or just double-click the file. To share, send the file
