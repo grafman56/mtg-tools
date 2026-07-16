@@ -496,13 +496,14 @@ async function analyze() {
             <span class="target">/ ~${want} target${scale < 1 ? " (scaled)" : ""}</span></div>`;
     }
     h += `<div class="stat"><div>Everything else</div><b>${counts.Other}</b></div></div>`;
-    h += `<details class="breakdown"><summary>Show cards counted in each category</summary>`;
+    h += `<details class="breakdown"><summary>Deck breakdown — show classified cards</summary>`;
+    h += `<div class="hint">Functional categories</div>`;
     for (const category of [...Object.keys(BASELINE), "Other"]) {
       const cards = classified[category];
       h += `<details><summary>${category} (${counts[category]})</summary>
             <div class="card-list">${cards.length ? cards.map(esc).join(" · ") : "None"}</div></details>`;
     }
-    h += `</details>`;
+    h += `<div id="themeBreakdown"></div></details>`;
     if (scale < 1) h += `<div class="hint">Targets scaled to your ${total}-card pile; a full deck wants ~${BASELINE.Lands} lands, ${BASELINE.Ramp} ramp, ${BASELINE["Card draw"]} draw, ${BASELINE.Interaction} interaction.</div>`;
     $("health").innerHTML = h;
 
@@ -517,6 +518,29 @@ async function analyze() {
     const tagIndex = await loadThemeTags();
     const { ranked: themesRanked, tribal } =
       detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex);
+    const jobs = themesRanked.map(([t, m, cm, gl]) =>
+      [t, m, [...(tax.themes[t].oracle_tags || []).map(tag => `otag:${tag}`),
+              ...tax.themes[t].payoffs], cm, gl]);
+    if (tribal) {
+      jobs.push([`${tribal[0]} tribal`, tribal[1],
+                 tax.tribal.payoffs.map(q => q.split("{TYPE}").join(tribal[0])),
+                 false, false]);
+    }
+    if (jobs.length) {
+      let breakdown = `<div class="hint" style="margin-top:10px">Theme matches</div>`;
+      for (const [theme, matched, , cmdrHit] of jobs) {
+        const evidence = [...matched];
+        if (cmdrHit && cmdrCard && !evidence.some(n => front(n).toLowerCase() === front(cmdrCard.name).toLowerCase())) {
+          evidence.unshift(cmdrCard.name);
+        }
+        breakdown += `<details><summary>${esc(theme)} (${evidence.length})</summary>
+          <div class="card-list">${evidence.length ? evidence.map(name => {
+            const commanderMatch = cmdrCard && front(name).toLowerCase() === front(cmdrCard.name).toLowerCase();
+            return esc(name) + (commanderMatch ? " (commander)" : "");
+          }).join(" · ") : "Goal selected; no matching cards currently in the deck."}</div></details>`;
+      }
+      $("themeBreakdown").innerHTML = breakdown;
+    }
     let th = `<h2>Themes in this pile — suggestions that fit what it's doing</h2>`;
     if (!themesRanked.length && !tribal) {
       th += `<div class="hint">No dominant theme yet (needs ${tax.min_cards}+ cards pulling the same direction) — the finishers below are generic to your colors.</div>`;
@@ -536,32 +560,13 @@ async function analyze() {
         th += sugg.map(finisherCardHtml).join("");
         $("themes").innerHTML = th;
       }
-      const jobs = themesRanked.map(([t, m, cm, gl]) =>
-        [t, m, [...(tax.themes[t].oracle_tags || []).map(tag => `otag:${tag}`),
-                ...tax.themes[t].payoffs], cm, gl]);
-      if (tribal) {
-        jobs.push([`${tribal[0]} tribal`, tribal[1],
-                   tax.tribal.payoffs.map(q => q.split("{TYPE}").join(tribal[0])),
-                   false, false]);
-      }
       for (const [theme, matched, queries, cmdrHit, isGoal] of jobs) {
         status(`Theme payoffs: ${theme}…`);
         const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet);
         const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
           + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");
-        const evidence = [...matched];
-        if (cmdrHit && cmdrCard && !evidence.some(n => front(n).toLowerCase() === front(cmdrCard.name).toLowerCase())) {
-          evidence.unshift(cmdrCard.name);
-        }
         th += `<div class="pill-row"><b>${esc(theme)}</b>${tags}
-               <span class="pill">${evidence.length ? evidence.length + " matching cards" : "not in the pile yet — building toward it"}</span></div>`;
-        if (evidence.length) {
-          th += `<details class="breakdown"><summary>Why this theme? Show matching cards</summary>
-                 <div class="card-list">${evidence.map(name => {
-                   const commander = cmdrCard && front(name).toLowerCase() === front(cmdrCard.name).toLowerCase();
-                   return esc(name) + (commander ? " (commander)" : "");
-                 }).join(" · ")}</div></details>`;
-        }
+               <span class="pill">${matched.length ? matched.length + (cmdrHit && !matched.some(n => cmdrCard && front(n).toLowerCase() === front(cmdrCard.name).toLowerCase()) ? " + commander" : "") + " matching cards" : "building toward it"}</span></div>`;
         th += sugg.length ? sugg.map(finisherCardHtml).join("")
                           : `<div class="hint">nothing new in identity/budget</div>`;
         $("themes").innerHTML = th;
