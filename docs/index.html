@@ -131,6 +131,7 @@ const BASELINE = { Lands: 37, Ramp: 10, "Card draw": 10, Interaction: 10, "Board
 // Moxfield/MTGA ("1 Name (SET) 123"), and section-header exports. Cards in a
 // Commander section/category come back separately; Sideboard/Maybeboard/
 // Considering sections are ignored.
+// Kept at parity with decktool.py's parse_text_decklist(); change both together.
 function parseList(text) {
   const cards = [], commanders = [];
   let section = "deck";

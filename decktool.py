@@ -96,22 +96,45 @@ def fetch_archidekt(deck_id):
 
 
 def parse_text_decklist(path):
+    """Parse a text decklist. Kept at parity with the web app's parseList()
+    (docs/index.html) so a paste that works in one works in the other:
+    understands Archidekt/Moxfield/MTGA exports, stripping set codes,
+    collector numbers, foil/etch flags, ^modifier^ and [Category] tags, and
+    skips Sideboard/Maybeboard/Considering/Tokens sections."""
     commanders, main = [], {}
-    section_cmdr = False
+    section = "deck"
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("//"):
             continue
-        if re.fullmatch(r"\[?commander:?\]?", line, re.IGNORECASE):
-            section_cmdr = True
+        header = re.fullmatch(
+            r"\[?(commander|deck|mainboard|main|sideboard|maybeboard|considering|tokens?)s?:?\]?",
+            line, re.IGNORECASE)
+        if header:
+            section = header.group(1).lower()
             continue
-        if re.fullmatch(r"\[?(main|deck|mainboard):?\]?", line, re.IGNORECASE):
-            section_cmdr = False
+        if re.match(r"sideboard|maybeboard|considering|token", section):
             continue
-        m = re.match(r"(\d+)x?\s+(.*)", line)
+
+        m = re.match(r"(\d+)x?\s+(.+)", line)
         qty, name = (int(m.group(1)), m.group(2)) if m else (1, line)
-        is_cmdr = section_cmdr or "*CMDR*" in name
-        name = name.replace("*CMDR*", "").strip()
+
+        # A trailing [Category] tag can mark the commander or a skipped board.
+        is_cmdr = section == "commander" or bool(re.search(r"\*CMDR\*", name, re.I))
+        cat = re.search(r"\[([^\]]*)\]\s*$", name)
+        if cat:
+            if re.search(r"maybeboard|sideboard|considering", cat.group(1), re.I):
+                continue
+            if re.search(r"commander", cat.group(1), re.I):
+                is_cmdr = True
+            name = name[:cat.start()]
+        name = re.sub(r"\*CMDR\*", "", name, flags=re.I)  # commander marker
+        name = re.sub(r"\*[A-Z]+\*", "", name)            # foil/etch flags like *F*
+        name = re.sub(r"\^[^^]*\^", "", name)             # Archidekt ^modifier^ tags
+        name = re.sub(r"\s*\(([A-Za-z0-9]{2,6})\)(\s+[\w★-]+)?\s*$", "", name)  # (set) 123
+        name = name.strip()
+        if not name:
+            continue
         if is_cmdr:
             commanders.append(name)
         else:
