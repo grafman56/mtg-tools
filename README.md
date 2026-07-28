@@ -92,6 +92,8 @@ they illustrate, are in [ARCHITECTURE.md](ARCHITECTURE.md). The short version:
   to be almost all infinite, so finite finishers were the real gap.
 - **Fuzzy theme detection is checked against known decks** (`validate_themes.py`)
   so tuning the regexes does not silently break archetype detection.
+- **Theme payoff suggestions favor cards that satisfy multiple active queries**
+  before falling back to Scryfall's EDHREC ordering.
 
 ## Data files
 

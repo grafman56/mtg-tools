@@ -28,9 +28,11 @@
     },
     "Blink / ETB value": {
       "oracle_tags": ["blink"],
-      "detect": [
+      "strong": [
         "exile .{0,40}, then return (it|that card|them) to the battlefield",
-        "return (it|them) to the battlefield",
+        "return (it|them) to the battlefield"
+      ],
+      "weak": [
         "when(ever)? .{0,30} enters( the battlefield)?, (you may )?(draw|create|return|search|destroy|exile|scry)",
         "enters the battlefield, "
       ],
