@@ -237,9 +237,10 @@ def detect_themes(cards, taxonomy, commanders=(), tagged_themes=(), tag_index=No
             qualifies = len(matched) >= (0 if theme in tagged_themes else
                                         (1 if cmdr_hit else taxonomy["min_cards"]))
         if qualifies:
-            hits[theme] = (matched, cmdr_hit)
-    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -len(kv[1][0])))
-    ranked = [(t, m, ch) for t, (m, ch) in ranked]
+            hits[theme] = (matched, cmdr_hit, score)
+    ranked = sorted(hits.items(), key=lambda kv: (not kv[1][1], -kv[1][2],
+                                                   -len(kv[1][0])))
+    ranked = [(t, m, ch) for t, (m, ch, _) in ranked]
     ranked = ranked[:taxonomy["max_themes"]]
 
     trib = taxonomy["tribal"]
@@ -310,23 +311,23 @@ def _suggest(queries, ident, max_price, deck_names, limit=8):
 
 
 def suggestion_cards(queries, ident, max_price, deck_names, limit=8):
-    """Return unique, unowned suggestions, stopping as soon as limit is met."""
-    seen, out = set(), []
+    """Return unowned suggestions, prioritizing cards matching multiple queries."""
+    candidates = {}
     for q in queries:
         full = f"({q}) id<={ident} legal:commander usd<={max_price:g}"
         try:
             results = scryfall_search(full)
         except (TimeoutError, urllib.error.URLError):
-            break  # suggestions are optional; return what we have promptly
+            break  # suggestions are optional; return candidates promptly
         for c in results:
             key = front(c["name"]).lower()
-            if key in deck_names or key in seen:
+            if key in deck_names:
                 continue
-            seen.add(key)
-            out.append(c)
-            if len(out) >= limit:
-                return out
-    return out
+            if key not in candidates:
+                candidates[key] = [c, 0, len(candidates)]
+            candidates[key][1] += 1
+    ranked = sorted(candidates.values(), key=lambda row: (-row[1], row[2]))
+    return [card for card, _, _ in ranked[:limit]]
 
 
 def front(name):

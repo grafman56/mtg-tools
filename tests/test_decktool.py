@@ -88,10 +88,46 @@ class ThemeTests(unittest.TestCase):
         ranked, _ = decktool.detect_themes(cards, self.taxonomy)
         self.assertEqual(len(ranked), self.taxonomy["max_themes"])
 
+    def test_strong_evidence_outranks_more_weak_matches(self):
+        cards = [
+            {"name": f"Sacrifice Payoff {i}",
+             "text": "Sacrifice another creature: Draw a card.",
+             "types": ["Creature"], "subtypes": []}
+            for i in range(3)
+        ] + [
+            {"name": f"Treasure Card {i}", "text": "Create a Treasure token.",
+             "types": ["Artifact"], "subtypes": []}
+            for i in range(5)
+        ]
+        ranked, _ = decktool.detect_themes(cards, self.taxonomy)
+        self.assertEqual(ranked[0][0], "Sacrifice / aristocrats")
+
+    def test_generic_etb_cards_do_not_establish_blink_theme(self):
+        cards = [
+            {"name": f"Value Creature {i}",
+             "text": "When this creature enters the battlefield, draw a card.",
+             "types": ["Creature"], "subtypes": []}
+            for i in range(6)
+        ]
+        ranked, _ = decktool.detect_themes(cards, self.taxonomy)
+        self.assertNotIn("Blink / ETB value", {row[0] for row in ranked})
+
 
 class RecommendationTests(unittest.TestCase):
     @patch.object(decktool, "scryfall_search")
-    def test_tag_results_are_filtered_and_can_avoid_extra_searches(self, search):
+    def test_suggestions_prioritize_cards_matching_multiple_theme_queries(self, search):
+        search.side_effect = [
+            [{"name": "First Query Only"}, {"name": "Both Queries"}],
+            [{"name": "Both Queries"}, {"name": "Second Query Only"}],
+        ]
+        cards = decktool.suggestion_cards(
+            ["o:first", "o:second"], "WU", 10, set(), limit=2)
+        self.assertEqual([c["name"] for c in cards],
+                         ["Both Queries", "First Query Only"])
+        self.assertEqual(search.call_count, 2)
+
+    @patch.object(decktool, "scryfall_search")
+    def test_tag_results_are_filtered_before_multi_query_ranking(self, search):
         search.return_value = [
             {"name": "Already Owned"}, {"name": "Theme Finisher"},
             {"name": "Theme Engine"},
@@ -101,8 +137,8 @@ class RecommendationTests(unittest.TestCase):
             {"already owned"}, limit=2)
         self.assertEqual([c["name"] for c in cards],
                          ["Theme Finisher", "Theme Engine"])
-        self.assertEqual(search.call_count, 1)
-        query = search.call_args.args[0]
+        self.assertEqual(search.call_count, 2)
+        query = search.call_args_list[0].args[0]
         self.assertIn("otag:blink", query)
         self.assertIn("id<=WU", query)
         self.assertIn("usd<=10", query)
