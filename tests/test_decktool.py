@@ -35,6 +35,9 @@ class ThemeTests(unittest.TestCase):
     def setUpClass(cls):
         cls.taxonomy = json.loads(Path("docs/themes.json").read_text())
 
+    def test_taxonomy_sets_eight_theme_suggestions(self):
+        self.assertEqual(self.taxonomy["max_theme_suggestions"], 8)
+
     def test_oracle_tag_can_identify_commander_theme_without_regex_match(self):
         cards = [{"name": "Tagged Commander", "text": "Vigilance",
                   "types": ["Creature"], "subtypes": ["Human"]}]
