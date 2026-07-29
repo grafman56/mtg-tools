@@ -4,7 +4,9 @@ Deck-building helper for casual Commander decks. It answers one question: "my
 deck does not close games, what should I add?" It finds combos already in a
 deck and one card away, detects the deck's themes, and suggests **finite** (non-
 infinite) game-enders in the deck's colors and budget, ranked by what people
-actually play.
+actually play. When theme fit ties, multiplayer suggestions rank table-wide
+effects above target-opponent effects. The output explains the detected scope
+and delivery type.
 
 It is a recommender, not a rules engine. The work is done by three community
 services (Scryfall for cards, Commander Spellbook for combos, EDHREC for

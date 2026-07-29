@@ -156,6 +156,35 @@ def load_theme_tags():
     return json.loads(path.read_text(encoding="utf-8"))["cards"] if path.exists() else {}
 
 
+def oracle_text(card):
+    """Return Oracle text for a normal or double-faced Scryfall card."""
+    return card.get("oracle_text") or "\n".join(
+        face.get("oracle_text", "") for face in card.get("card_faces", []))
+
+
+def impact_for_card(card, taxonomy):
+    """Classify multiplayer reach without treating it as theme evidence."""
+    text = oracle_text(card)
+    impact = taxonomy.get("impact", {})
+    scope = next((rule for rule in impact.get("scope", [])
+                  if re.search(rule["pattern"], text, re.IGNORECASE)), None)
+    if not scope:
+        return {"score": 0, "scope": None, "delivery": None}
+    delivery = next((rule for rule in impact.get("delivery", [])
+                     if re.search(rule["pattern"], text, re.IGNORECASE)),
+                    {"name": "one-shot effect", "weight": 1.0})
+    return {"score": scope["weight"] * delivery["weight"],
+            "scope": scope["name"], "delivery": delivery["name"]}
+
+
+def rank_suggestions(candidates, taxonomy):
+    """Rank multi-query matches first, then multiplayer impact, then API order."""
+    return [card for card, _, _ in sorted(
+        candidates,
+        key=lambda row: (-row[1], -impact_for_card(row[0], taxonomy)["score"], row[2]),
+    )]
+
+
 def deck_card_data(arg, commanders, main):
     """Return per-card data [{name, qty, text, types, subtypes}] for the deck.
     Archidekt decks carry oracle text already; text lists go through Scryfall."""
@@ -299,6 +328,7 @@ def print_themes(deck_name, commanders, main, cards, max_price):
 
 
 def _suggest(queries, ident, max_price, deck_names, limit=8):
+    taxonomy = load_themes()
     for c in suggestion_cards(queries, ident, max_price, deck_names, limit):
         price = c.get("prices", {}).get("usd")
         text = (c.get("oracle_text")
@@ -306,12 +336,15 @@ def _suggest(queries, ident, max_price, deck_names, limit=8):
                                for f in c.get("card_faces", []))).replace("\n", " ")
         print(f"   + {c['name']} ({c.get('mana_cost', '?')})"
               f"{' $' + price if price else ''}")
+        impact = impact_for_card(c, taxonomy)
+        if impact["score"]:
+            print(f"       Multiplayer impact: {impact['scope']}; {impact['delivery']}")
         print(f"       {text[:140]}")
     print()
 
 
 def suggestion_cards(queries, ident, max_price, deck_names, limit=8):
-    """Return unowned suggestions, prioritizing cards matching multiple queries."""
+    """Return unowned suggestions, prioritizing theme fit then multiplayer impact."""
     candidates = {}
     for q in queries:
         full = f"({q}) id<={ident} legal:commander usd<={max_price:g}"
@@ -326,8 +359,7 @@ def suggestion_cards(queries, ident, max_price, deck_names, limit=8):
             if key not in candidates:
                 candidates[key] = [c, 0, len(candidates)]
             candidates[key][1] += 1
-    ranked = sorted(candidates.values(), key=lambda row: (-row[1], row[2]))
-    return [card for card, _, _ in ranked[:limit]]
+    return rank_suggestions(candidates.values(), load_themes())[:limit]
 
 
 def front(name):
@@ -371,6 +403,7 @@ def scryfall_search(query):
 
 def print_finishers(deck_name, commanders, main, max_price):
     ident = commander_identity(commanders)
+    taxonomy = load_themes()
     deck_names = set(main) | set(commanders)
     deck_names |= {n.split("//")[0].strip() for n in deck_names}
     print(f"# Finisher suggestions for {deck_name} "
@@ -380,7 +413,9 @@ def print_finishers(deck_name, commanders, main, max_price):
         cards = scryfall_search(full_q)
         fresh = [c for c in cards
                  if c["name"] not in deck_names
-                 and c["name"].split("//")[0].strip() not in deck_names][:8]
+                 and c["name"].split("//")[0].strip() not in deck_names]
+        fresh = rank_suggestions(
+            [(card, 1, order) for order, card in enumerate(fresh)], taxonomy)[:8]
         print(f"## {bucket}")
         if not fresh:
             print("  (nothing new in identity/budget)")
@@ -393,6 +428,9 @@ def print_finishers(deck_name, commanders, main, max_price):
             text = next((l for l in line1 if GAME_ENDING_PAT.search(l)
                          or "win the game" in l.lower()), line1[0] if line1 else "")
             print(f"  - {c['name']} ({c.get('mana_cost', '?')}){pricestr}")
+            impact = impact_for_card(c, taxonomy)
+            if impact["score"]:
+                print(f"      Multiplayer impact: {impact['scope']}; {impact['delivery']}")
             print(f"      {text[:150]}")
         print()
 

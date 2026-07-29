@@ -114,6 +114,32 @@ class ThemeTests(unittest.TestCase):
 
 
 class RecommendationTests(unittest.TestCase):
+    def test_each_opponent_effect_outranks_target_opponent(self):
+        target = {"name": "Target Drain", "oracle_text": "Target opponent loses 1 life."}
+        table = {"name": "Table Drain", "oracle_text": "Each opponent loses 1 life."}
+        ranked = decktool.rank_suggestions(
+            [(target, 1, 0), (table, 1, 1)],
+            json.loads(Path("docs/themes.json").read_text()),
+        )
+        self.assertEqual([card["name"] for card in ranked], ["Table Drain", "Target Drain"])
+
+    def test_repeatable_table_wide_effect_outranks_one_shot_effect(self):
+        one_shot = {"name": "One Shot", "oracle_text": "Each opponent loses 1 life."}
+        repeatable = {"name": "Repeatable", "oracle_text": "Whenever a creature dies, each opponent loses 1 life."}
+        ranked = decktool.rank_suggestions(
+            [(one_shot, 1, 0), (repeatable, 1, 1)],
+            json.loads(Path("docs/themes.json").read_text()),
+        )
+        self.assertEqual([card["name"] for card in ranked], ["Repeatable", "One Shot"])
+
+    def test_each_player_effect_scores_below_each_opponent(self):
+        taxonomy = json.loads(Path("docs/themes.json").read_text())
+        each_player = decktool.impact_for_card(
+            {"name": "Symmetrical", "oracle_text": "Each player loses 1 life."}, taxonomy)
+        each_opponent = decktool.impact_for_card(
+            {"name": "Table", "oracle_text": "Each opponent loses 1 life."}, taxonomy)
+        self.assertLess(each_player["score"], each_opponent["score"])
+
     @patch.object(decktool, "scryfall_search")
     def test_suggestions_prioritize_cards_matching_multiple_theme_queries(self, search):
         search.side_effect = [
@@ -125,6 +151,15 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual([c["name"] for c in cards],
                          ["Both Queries", "First Query Only"])
         self.assertEqual(search.call_count, 2)
+
+    @patch.object(decktool, "scryfall_search")
+    def test_suggestions_use_impact_to_break_equal_theme_matches(self, search):
+        search.return_value = [
+            {"name": "Target Drain", "oracle_text": "Target opponent loses 1 life."},
+            {"name": "Table Drain", "oracle_text": "Each opponent loses 1 life."},
+        ]
+        cards = decktool.suggestion_cards(["o:drain"], "B", 10, set(), limit=2)
+        self.assertEqual([card["name"] for card in cards], ["Table Drain", "Target Drain"])
 
     @patch.object(decktool, "scryfall_search")
     def test_tag_results_are_filtered_before_multi_query_ranking(self, search):
