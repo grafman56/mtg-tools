@@ -235,7 +235,8 @@
         "landfall",
         "whenever a land (you control )?enters",
         "play (an additional|two additional) lands?",
-        "return .{0,30}land cards? from your graveyard"
+        "return .{0,30}land cards? from your graveyard",
+        "sacrifice a land"
       ],
       "payoffs": [
         "o:landfall (o:damage or o:token or o:\"+1/+1\")",
