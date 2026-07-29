@@ -18,7 +18,7 @@ Subcommands:
 
 Options:
   --show-infinite         Expand infinite combos instead of collapsing them.
-  --max-price N           Only suggest missing cards costing <= N dollars (default 20).
+  --max-price N           Only suggest missing cards costing <= N dollars (default 100).
   --json                  Dump raw report as JSON (for piping to other tools).
 
 Deck argument accepts a bare Archidekt ID (23718180), an Archidekt URL, or a
@@ -39,6 +39,7 @@ from pathlib import Path
 CACHE_DIR = Path(__file__).parent / "cache"
 SPELLBOOK_URL = "https://backend.commanderspellbook.com/find-my-combos"
 UA = "mtg-tools/0.1 (decktool; +https://github.com/grafman56/mtg-tools)"
+DEFAULT_MAX_PRICE = 100.0
 
 # Feature names that mean "this actually ends the game".
 GAME_ENDING_PAT = re.compile(
@@ -612,7 +613,7 @@ def fmt_combo(c, show_missing=False):
     return "\n".join(lines)
 
 
-def print_report(rep, show_infinite=False, max_price=20.0):
+def print_report(rep, show_infinite=False, max_price=DEFAULT_MAX_PRICE):
     print(f"# {rep['deck']} — {', '.join(rep['commanders'])} ({rep['deck_size']} cards)\n")
 
     inc_fin = [c for c in rep["included"] if not c["infinite"]]
@@ -667,7 +668,7 @@ def main():
                     choices=["fetch", "combos", "wincons", "finishers", "themes"])
     ap.add_argument("deck", help="Archidekt ID/URL or path to text decklist")
     ap.add_argument("--show-infinite", action="store_true")
-    ap.add_argument("--max-price", type=float, default=20.0)
+    ap.add_argument("--max-price", type=float, default=DEFAULT_MAX_PRICE)
     ap.add_argument("--json", action="store_true", dest="as_json")
     args = ap.parse_args()
 
