@@ -347,7 +347,7 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
             keep_score -= policy["high_commitment_graveyard_review"]["review_risk"]
             reasons.extend([
                 "high mana and color commitment",
-                "one-shot graveyard recovery overlaps other deck access",
+                f"one-shot graveyard recovery overlaps {recovery_overlap} other recovery cards",
             ])
         reasons.append("Other functional role" if roles == ["Other"]
                        else ", ".join(roles) + " is above target")

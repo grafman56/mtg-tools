@@ -225,7 +225,7 @@ class RecommendationTests(unittest.TestCase):
         eerie = next(cut for cut in cuts if cut["name"] == "Eerie Ultimatum")
         self.assertIn("strong active-theme evidence", eerie["reasons"])
         self.assertIn("high mana and color commitment", eerie["reasons"])
-        self.assertIn("one-shot graveyard recovery overlaps other deck access", eerie["reasons"])
+        self.assertIn("one-shot graveyard recovery overlaps 2 other recovery cards", eerie["reasons"])
 
     def test_blink_oracle_wording_marks_brago_and_etb_cards_as_theme_support(self):
         brago = {"name": "Brago, King Eternal", "types": ["Legendary", "Creature"],

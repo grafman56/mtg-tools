@@ -434,12 +434,13 @@ function highCommitmentGraveyardPayoff(card, cards, policy) {
   const { types } = typeParts(card);
   const pips = [...(card.mana_cost || "").matchAll(/\{([WUBRG])\}/g)].map(match => match[1]);
   const overlap = cards.filter(other => other !== card && graveyardRecovery(other)).length;
-  return types.includes("Sorcery")
+  const eligible = types.includes("Sorcery")
     && /return any number of .{0,80}from your graveyard/i.test(oracleOf(card))
     && card.cmc >= settings.minimum_mana_value
     && pips.length >= settings.minimum_colored_pips
     && new Set(pips).size >= settings.minimum_distinct_colors
     && overlap >= settings.minimum_recovery_overlap;
+  return { eligible, overlap };
 }
 
 function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts, scale, tax, tagIndex) {
@@ -475,18 +476,18 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
       evidence = evidence.map(value => value === "weak" ? "strong" : value);
     }
     const highCommitment = highCommitmentGraveyardPayoff(card, cards, policy);
-    if (evidence.includes("strong") && !highCommitment) return null;
+    if (evidence.includes("strong") && !highCommitment.eligible) return null;
     if (tribal && subtypes.includes(tribal[0])) return null;
     const impact = impactForCard(card, tax);
     if (impact.score >= policy.meaningful_multiplayer_impact) return null;
     const weak = evidence.filter(x => x === "weak").length;
     if (weak) return null;
     let keep = weak * policy.keep_weights.active_theme_weak + impact.score;
-    const reasons = [highCommitment ? "strong active-theme evidence"
+    const reasons = [highCommitment.eligible ? "strong active-theme evidence"
       : weak ? "weak active-theme evidence only" : "no active-theme evidence"];
-    if (highCommitment) {
+    if (highCommitment.eligible) {
       keep -= (policy.high_commitment_graveyard_review || { review_risk: 4 }).review_risk;
-      reasons.push("high mana and color commitment", "one-shot graveyard recovery overlaps other deck access");
+      reasons.push("high mana and color commitment", `one-shot graveyard recovery overlaps ${highCommitment.overlap} other recovery cards`);
     }
     reasons.push(roles.length === 1 && roles[0] === "Other" ? "Other functional role" : `${roles.join(", ")} is above target`);
     if (!impact.score) reasons.push("no multiplayer impact");
