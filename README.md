@@ -57,6 +57,10 @@ theme evidence, and meaningful table-wide multiplayer effects. It does not
 rank cards by mana value in this version. When a commander can blink nonland
 permanents, the tool also protects ETB cards and artifact ramp that the commander
 can reset, such as Basalt Monolith in a Brago deck.
+Lands-matter evidence includes cards that sacrifice lands for recurring value.
+The review also retains cards that cover at least two core roles, such as
+repeatable Treasure ramp plus card draw. These are safeguards, not claims that
+every land-sacrifice or multifunctional card belongs in every deck.
 “Other functional roles” does not mean off-theme: death payoffs, copy targets,
 and similar build-around cards are listed under their detected themes below the
 basic ramp/draw/removal audit. Commander-enabled mechanics receive extra theme

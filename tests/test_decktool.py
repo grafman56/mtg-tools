@@ -44,7 +44,7 @@ class ThemeTests(unittest.TestCase):
         ranked, _ = decktool.detect_themes(
             cards, self.taxonomy, ["Tagged Commander"], {"Landfall / lands matter"})
         landfall = next(row for row in ranked if row[0] == "Landfall / lands matter")
-        self.assertEqual(landfall, ("Landfall / lands matter", [], True))
+        self.assertEqual(landfall, ("Landfall / lands matter", ["Tagged Commander"], False))
 
     def test_tag_index_adds_card_as_theme_evidence(self):
         cards = [{"name": "Semantic Match", "text": "Vigilance",
@@ -115,6 +115,35 @@ class ThemeTests(unittest.TestCase):
         ranked, _ = decktool.detect_themes(cards, self.taxonomy)
         self.assertNotIn("Blink / ETB value", {row[0] for row in ranked})
 
+    def test_land_sacrifice_support_matches_lands_matter_theme(self):
+        baloth_prime = {
+            "name": "Baloth Prime", "types": ["Creature"], "subtypes": ["Beast"],
+            "text": "Whenever you sacrifice a land, create a tapped 4/4 green Beast creature token and untap this creature. {4}, Sacrifice a land: You gain 2 life.",
+        }
+        nonland_sacrifice = {
+            "name": "Viscera Seer", "types": ["Creature"], "subtypes": ["Vampire"],
+            "text": "Sacrifice a creature: Scry 1.",
+        }
+        self.assertEqual(decktool.theme_evidence_for_card(
+            baloth_prime, "Landfall / lands matter", self.taxonomy), "strong")
+        self.assertIsNone(decktool.theme_evidence_for_card(
+            nonland_sacrifice, "Landfall / lands matter", self.taxonomy))
+
+    def test_semantic_tag_does_not_label_unrelated_commander_as_blink_theme(self):
+        necrobloom = {
+            "name": "The Necrobloom", "types": ["Legendary", "Creature"],
+            "subtypes": ["Plant"],
+            "text": "Landfall — Whenever a land you control enters, create a 0/1 green Plant creature token. Land cards in your graveyard have dredge 2.",
+        }
+        etb_card = {
+            "name": "ETB Value", "types": ["Creature"], "subtypes": [],
+            "text": "When this creature enters, draw a card.",
+        }
+        ranked, _ = decktool.detect_themes(
+            [necrobloom, etb_card], self.taxonomy,
+            ["The Necrobloom"], {"Blink / ETB value"})
+        self.assertNotIn("Blink / ETB value", {row[0] for row in ranked})
+
 
 class RecommendationTests(unittest.TestCase):
     @classmethod
@@ -129,6 +158,51 @@ class RecommendationTests(unittest.TestCase):
 
     def test_default_max_price_is_100(self):
         self.assertEqual(decktool.DEFAULT_MAX_PRICE, 100.0)
+
+    def test_repeatable_treasure_and_draw_engine_is_protected_from_cut_review(self):
+        black_market_connections = {
+            "name": "Black Market Connections", "types": ["Enchantment"], "subtypes": [],
+            "text": "At the beginning of your first main phase, choose one or more — Create a Treasure token. You lose 1 life. Draw a card. You lose 2 life. Create a 3/2 colorless Shapeshifter creature token with changeling. You lose 3 life.",
+        }
+        cuts = decktool.cut_candidates(
+            [black_market_connections], [], {"Landfall / lands matter"}, None, [],
+            self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 12, "Card draw": 12,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        self.assertEqual(decktool.card_roles(black_market_connections), ["Ramp", "Card draw"])
+        self.assertEqual(cuts, [])
+
+    def test_token_linked_draw_is_protected_when_deck_creates_tokens(self):
+        necrobloom = {
+            "name": "The Necrobloom", "types": ["Legendary", "Creature"],
+            "subtypes": ["Plant"],
+            "text": "Landfall — Whenever a land you control enters, create a 0/1 green Plant creature token.",
+        }
+        tocasias_welcome = {
+            "name": "Tocasia's Welcome", "types": ["Enchantment"], "subtypes": [],
+            "text": "Whenever one or more creatures with mana value 3 or less enter, draw a card. This ability triggers only once each turn.",
+        }
+        cuts = decktool.cut_candidates(
+            [necrobloom, tocasias_welcome], [],
+            {"Landfall / lands matter"}, None, ["The Necrobloom"], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 10, "Card draw": 12,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        self.assertEqual(cuts, [])
+
+    def test_efficient_land_ramp_is_not_cut_from_lands_matter_deck(self):
+        farseek = {
+            "name": "Farseek", "types": ["Sorcery"], "subtypes": [], "mana_value": 2,
+            "text": "Search your library for a Plains, Island, Swamp, or Mountain card, put it onto the battlefield tapped, then shuffle.",
+        }
+        cuts = decktool.cut_candidates(
+            [farseek], [], {"Landfall / lands matter"}, None, [], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 12, "Card draw": 10,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        self.assertEqual(decktool.card_roles(farseek), ["Ramp"])
+        self.assertEqual(cuts, [])
 
     def test_blink_oracle_wording_marks_brago_and_etb_cards_as_theme_support(self):
         brago = {"name": "Brago, King Eternal", "types": ["Legendary", "Creature"],
