@@ -46,6 +46,11 @@ GAME_ENDING_PAT = re.compile(
     re.IGNORECASE,
 )
 
+ROLE_TARGETS = {
+    "Lands": 37, "Ramp": 10, "Card draw": 10,
+    "Interaction": 10, "Board wipes": 3,
+}
+
 
 def http_json(url, body=None):
     data = json.dumps(body).encode() if body is not None else None
@@ -158,7 +163,7 @@ def load_theme_tags():
 
 def oracle_text(card):
     """Return Oracle text for a normal or double-faced Scryfall card."""
-    return card.get("oracle_text") or "\n".join(
+    return card.get("oracle_text") or card.get("text") or "\n".join(
         face.get("oracle_text", "") for face in card.get("card_faces", []))
 
 
@@ -179,10 +184,135 @@ def impact_for_card(card, taxonomy):
 
 def rank_suggestions(candidates, taxonomy):
     """Rank multi-query matches first, then multiplayer impact, then API order."""
-    return [card for card, _, _ in sorted(
+    return [{**card, "_theme_matches": matches} for card, matches, _ in sorted(
         candidates,
         key=lambda row: (-row[1], -impact_for_card(row[0], taxonomy)["score"], row[2]),
     )]
+
+
+def card_roles(card):
+    """Return Commander functional roles used to protect cut candidates."""
+    types = card.get("types") or re.split(
+        r"\s+", (card.get("type_line") or "").split("—")[0])
+    text = oracle_text(card).lower()
+    if "Land" in types:
+        return ["Lands"]
+    roles = []
+    if re.search(r"add \{|add (one|two|three|x) mana|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast", text):
+        roles.append("Ramp")
+    if re.search(r"draw (a|one|two|three|four|five|six|seven|x|\d+|that many) cards?\b|draw cards? equal to", text):
+        roles.append("Card draw")
+    if re.search(r"destroy all|exile all|each creature|all creatures", text) and re.search(r"destroy|exile|-\d+/-\d+|sacrifices", text):
+        roles.append("Board wipes")
+    if re.search(r"(destroy|exile|counter|return) target|target .{0,35} (gets? -\d+/-\d+|phases out)|deals? (\d+|x) damage to (any target|target creature)|put target .{0,35} (on the top|on the bottom|into its owner's library)|each opponent sacrifices", text):
+        roles.append("Interaction")
+    return roles or ["Other"]
+
+
+def theme_evidence_for_card(card, theme, taxonomy, tag_index=None):
+    """Return strong, weak, or no evidence for one card and active theme."""
+    spec = taxonomy["themes"][theme]
+    text = oracle_text(card)
+    tagged = theme in (tag_index or {}).get(front(card["name"]).lower(), [])
+    if tagged:
+        return "strong"
+    if "strong" in spec or "weak" in spec:
+        if re.search("|".join(spec.get("strong", [])) or "(?!x)x", text, re.IGNORECASE):
+            return "strong"
+        if re.search("|".join(spec.get("weak", [])) or "(?!x)x", text, re.IGNORECASE):
+            return "weak"
+        return None
+    return "strong" if re.search("|".join(spec["detect"]), text, re.IGNORECASE) else None
+
+
+def functional_role_counts(cards):
+    counts = {role: 0 for role in ROLE_TARGETS}
+    for card in cards:
+        for role in card_roles(card):
+            if role in counts:
+                counts[role] += card.get("qty", 1)
+    return counts
+
+
+def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxonomy,
+                   tag_index=None, role_counts=None, scale=None):
+    """Return cautious, replacement-aware cards for a Commander cut review."""
+    if not active_themes and not tribal:
+        return []
+    policy = taxonomy["cut_candidates"]
+    weights = policy["keep_weights"]
+    role_counts = role_counts or functional_role_counts(cards)
+    scale = scale if scale is not None else min(1, sum(c.get("qty", 1) for c in cards) / 99)
+    commander_keys = {front(name).lower() for name in commanders}
+    tribal_type = tribal[0] if tribal else None
+
+    def suggestion_score(card):
+        return card.get("_theme_matches", 1) * 3 + impact_for_card(card, taxonomy)["score"]
+
+    if not suggestions:
+        return []
+    replacement = max(suggestions, key=suggestion_score)
+    replacement_score = suggestion_score(replacement)
+    results = []
+    for order, card in enumerate(cards):
+        name = card["name"]
+        if front(name).lower() in commander_keys:
+            continue
+        roles = card_roles(card)
+        if "Lands" in roles:
+            continue
+        protected = [role for role in roles if role in ROLE_TARGETS
+                     and role_counts.get(role, 0) < round(ROLE_TARGETS[role] * scale)]
+        if protected:
+            continue
+        evidence = [theme_evidence_for_card(card, theme, taxonomy, tag_index)
+                    for theme in active_themes]
+        if "strong" in evidence:
+            continue
+        if tribal_type and tribal_type in card.get("subtypes", []):
+            continue
+        impact = impact_for_card(card, taxonomy)
+        if impact["score"] >= policy["meaningful_multiplayer_impact"]:
+            continue
+        weak = evidence.count("weak")
+        keep_score = weak * weights["active_theme_weak"] + impact["score"]
+        delta = replacement_score - keep_score
+        threshold = (policy["weak_theme_minimum_replacement_delta"] if weak
+                     else policy["minimum_replacement_delta"])
+        if delta < threshold:
+            continue
+        reasons = (["weak active-theme evidence only"] if weak
+                   else ["no active-theme evidence"])
+        reasons.append("Other functional role" if roles == ["Other"]
+                       else ", ".join(roles) + " is above target")
+        if not impact["score"]:
+            reasons.append("no multiplayer impact")
+        results.append({"name": name, "keep_score": keep_score,
+                        "replacement_delta": delta, "reasons": reasons,
+                        "roles": roles, "impact": impact,
+                        "replacement": replacement, "order": order})
+    results.sort(key=lambda item: (-item["replacement_delta"], item["keep_score"], item["order"]))
+    return results[:policy["max_results"]]
+
+
+def print_cut_candidates(cuts, taxonomy):
+    """Print cut candidates as review advice, never as mandatory replacements."""
+    print("## Potential cuts to review")
+    print("   This is a review aid, not a one-for-one replacement rule.")
+    if not cuts:
+        print("   No low-confidence cuts found without weakening a protected role.\n")
+        return
+    for cut in cuts:
+        replacement = cut["replacement"]
+        impact = impact_for_card(replacement, taxonomy)
+        print(f"   - {cut['name']}: {'; '.join(cut['reasons'])}.")
+        match_count = replacement.get("_theme_matches", 1)
+        detail = (f"matches {match_count} active theme "
+                  f"{'query' if match_count == 1 else 'queries'}")
+        if impact["score"]:
+            detail += f"; {impact['scope']}; {impact['delivery']}"
+        print(f"     Possible upgrade: {replacement['name']} ({detail}).")
+    print()
 
 
 def deck_card_data(arg, commanders, main):
@@ -306,11 +436,12 @@ def print_themes(deck_name, commanders, main, cards, max_price):
               f"{taxonomy['min_cards']} matching cards.")
         return
     active = {t for t, _, _ in ranked}
+    theme_suggestions = []
     for pair, spec in taxonomy.get("intersections", {}).items():
         a, b = pair.split("|")
         if a in active and b in active:
             print(f"## {spec['label']} (both themes present)")
-            _suggest(spec["payoffs"], ident, max_price, deck_names)
+            theme_suggestions.extend(_suggest(spec["payoffs"], ident, max_price, deck_names))
     for theme, matched, cmdr_hit in ranked:
         flag = " [commander theme]" if cmdr_hit else ""
         print(f"## {theme}{flag} — {len(matched)} cards")
@@ -318,18 +449,22 @@ def print_themes(deck_name, commanders, main, cards, max_price):
         spec = taxonomy["themes"][theme]
         queries = [f"otag:{tag}" for tag in spec.get("oracle_tags", [])]
         queries += spec["payoffs"]
-        _suggest(queries, ident, max_price, deck_names)
+        theme_suggestions.extend(_suggest(queries, ident, max_price, deck_names))
     if tribal:
         ttype, members = tribal
         print(f"## {ttype} tribal — {len(members)} creatures")
         print(f"   e.g. {', '.join(members[:6])}")
         queries = [q.replace("{TYPE}", ttype) for q in taxonomy["tribal"]["payoffs"]]
-        _suggest(queries, ident, max_price, deck_names)
+        theme_suggestions.extend(_suggest(queries, ident, max_price, deck_names))
+    print_cut_candidates(
+        cut_candidates(cards, theme_suggestions, active, tribal, commanders,
+                       taxonomy, tag_index), taxonomy)
 
 
 def _suggest(queries, ident, max_price, deck_names, limit=8):
     taxonomy = load_themes()
-    for c in suggestion_cards(queries, ident, max_price, deck_names, limit):
+    cards = suggestion_cards(queries, ident, max_price, deck_names, limit)
+    for c in cards:
         price = c.get("prices", {}).get("usd")
         text = (c.get("oracle_text")
                 or " // ".join(f.get("oracle_text", "")
@@ -341,6 +476,7 @@ def _suggest(queries, ident, max_price, deck_names, limit=8):
             print(f"       Multiplayer impact: {impact['scope']}; {impact['delivery']}")
         print(f"       {text[:140]}")
     print()
+    return cards
 
 
 def suggestion_cards(queries, ident, max_price, deck_names, limit=8):
