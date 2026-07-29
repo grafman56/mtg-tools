@@ -68,6 +68,10 @@ and similar build-around cards are listed under their detected themes below the
 basic ramp/draw/removal audit. Commander-enabled mechanics receive extra theme
 weight, while incidental self-sacrifice wording alone cannot establish an
 aristocrats theme.
+Theme-query matches provide a bounded strength preference. They do not outrank
+a materially broader multiplayer payoff that fills the same purpose. The optional
+Oracle Tag index adds semantic role evidence for ramp, draw, removal, board
+wipes, and recursion when card wording does not match a local pattern exactly.
 
 Run it locally with `python -m http.server 8420 --directory docs` and open
 http://localhost:8420, or just double-click the file. To share, send the file
@@ -118,9 +122,12 @@ they illustrate, are in [ARCHITECTURE.md](ARCHITECTURE.md). The short version:
   keywords. Edit this to add or tune a theme; both front-ends pick it up.
 - `docs/theme-tags.json` — optional generated Oracle Tag index. It lets both
   front-ends use Scryfall's community-maintained semantic labels as a second
-  detection signal without making tag searches during every analysis. Refresh
-  it politely with `python scripts/build_theme_tags.py`; if it is absent, the
-  rules-text detector continues to work normally.
+  detection and bounded strength signal without making tag searches during every
+  analysis. The builder keeps its source cache in
+  `scripts/theme-tag-cache.json`, fetches at most one missing Scryfall tag per
+  run, and updates the static browser index only after all requested tags are
+  cached. If Scryfall rate-limits a refresh, the published index stays unchanged.
+  If the index is absent, the rules-text detector continues to work normally.
 - `docs/combos.json` — compact Commander Spellbook snapshot, built by
   `scripts/build_combo_db.py`. Refresh occasionally:
 

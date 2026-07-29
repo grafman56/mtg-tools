@@ -216,6 +216,21 @@ The cut review protects those cards rather than treating them as generic surplus
 Incoming replacements must also show active-theme or tribal evidence, so a card
 such as Psychosis Crawler cannot become a generic replacement in a blink deck.
 
+Theme fit remains a bounded preference when suggestions rank. It rewards a card
+that matches more of the active deck plan, but it cannot outrank a materially
+broader repeatable payoff only because it matched one more query. Scryfall Oracle
+Tags supply a second, semantic source for broad roles such as ramp, draw,
+removal, board wipes, and recursion. This improves coverage for unusual Oracle
+wording while keeping the result explainable. Tags add evidence. They do not
+create a theme or prove that a card belongs in every deck.
+
+The tag refresh is deliberately incremental. A local source cache records one
+Scryfall result set per Oracle Tag under `scripts/`, outside the GitHub Pages
+artifact directory. Each builder run fetches at most one missing tag. The tool
+does not replace `docs/theme-tags.json` until it has every requested result. A
+429 response therefore preserves the last working static index, and a later run
+can resume without re-fetching completed tags.
+
 ## 10. Zero-backend, static hosting
 
 Deck Forge is one self-contained HTML file with its CSS and JS inline. GitHub

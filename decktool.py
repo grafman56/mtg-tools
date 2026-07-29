@@ -183,11 +183,34 @@ def impact_for_card(card, taxonomy):
             "scope": scope["name"], "delivery": delivery["name"]}
 
 
-def rank_suggestions(candidates, taxonomy):
-    """Rank multi-query matches first, then multiplayer impact, then API order."""
+def contextual_strength_for_card(card, taxonomy, theme_matches=0, tag_index=None):
+    """Summarize observable card strength without treating it as theme evidence."""
+    impact = impact_for_card(card, taxonomy)
+    strength = taxonomy.get("strength", {})
+    theme_bonus = theme_matches * strength.get("theme_match_bonus", 0.5)
+    allowed_tags = {rule["factor"] for rule in strength.get("oracle_tags", [])}
+    tagged = (tag_index or {}).get(front(card["name"]).lower(), [])
+    tag_factors = [factor for factor in tagged if factor in allowed_tags]
+    tag_factors = tag_factors[:strength.get("maximum_oracle_tag_factors", 2)]
+    score = impact["score"] + theme_bonus + (
+        len(tag_factors) * strength.get("oracle_tag_bonus", 0.35))
+    factors = [value for value in (impact["scope"], impact["delivery"]) if value]
+    factors.extend(tag_factors)
+    if theme_matches:
+        factors.append("theme fit")
+    bands = strength.get("bands", [{"name": "strong", "minimum": 3},
+                                    {"name": "situational", "minimum": 1},
+                                    {"name": "limited", "minimum": 0}])
+    band = next(rule["name"] for rule in bands if score >= rule["minimum"])
+    return {"score": score, "band": band, "factors": factors, "impact": impact}
+
+
+def rank_suggestions(candidates, taxonomy, tag_index=None):
+    """Rank theme fit with a bounded bonus, then contextual impact and API order."""
     return [{**card, "_theme_matches": matches} for card, matches, _ in sorted(
         candidates,
-        key=lambda row: (-row[1], -impact_for_card(row[0], taxonomy)["score"], row[2]),
+        key=lambda row: (-contextual_strength_for_card(
+            row[0], taxonomy, row[1], tag_index)["score"], row[2]),
     )]
 
 
@@ -558,7 +581,7 @@ def suggestion_cards(queries, ident, max_price, deck_names, limit=8):
             if key not in candidates:
                 candidates[key] = [c, 0, len(candidates)]
             candidates[key][1] += 1
-    return rank_suggestions(candidates.values(), load_themes())[:limit]
+    return rank_suggestions(candidates.values(), load_themes(), load_theme_tags())[:limit]
 
 
 def front(name):

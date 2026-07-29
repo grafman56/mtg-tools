@@ -348,6 +348,61 @@ class RecommendationTests(unittest.TestCase):
         )
         self.assertEqual([card["name"] for card in ranked], ["Repeatable", "One Shot"])
 
+    def test_bounded_theme_bonus_does_not_outrank_stronger_same_role_payoff(self):
+        narrow = {
+            "name": "Narrow Theme Payoff",
+            "oracle_text": "Whenever another creature dies, target opponent loses 1 life.",
+        }
+        broad = {
+            "name": "Broad Theme Payoff",
+            "oracle_text": "Whenever another creature dies, each opponent loses 1 life.",
+        }
+        ranked = decktool.rank_suggestions(
+            [(narrow, 2, 0), (broad, 1, 1)],
+            json.loads(Path("docs/themes.json").read_text()),
+        )
+        self.assertEqual([card["name"] for card in ranked],
+                         ["Broad Theme Payoff", "Narrow Theme Payoff"])
+
+    def test_contextual_strength_explains_bounded_theme_fit_and_table_reach(self):
+        taxonomy = json.loads(Path("docs/themes.json").read_text())
+        card = {
+            "name": "Broad Theme Payoff",
+            "oracle_text": "Whenever another creature dies, each opponent loses 1 life.",
+        }
+        profile = decktool.contextual_strength_for_card(card, taxonomy, theme_matches=1)
+        self.assertEqual(profile["band"], "strong")
+        self.assertIn("each opponent", profile["factors"])
+        self.assertIn("repeatable trigger", profile["factors"])
+        self.assertIn("theme fit", profile["factors"])
+        self.assertGreater(profile["score"],
+                           decktool.contextual_strength_for_card(
+                               {"name": "Narrow", "oracle_text":
+                                "Whenever another creature dies, target opponent loses 1 life."},
+                               taxonomy, theme_matches=2)["score"])
+
+    def test_oracle_tag_adds_contextual_strength_for_unusual_wording(self):
+        taxonomy = json.loads(Path("docs/themes.json").read_text())
+        card = {"name": "Semantic Ramp", "oracle_text": "Unusual mana wording."}
+        tagged = decktool.contextual_strength_for_card(
+            card, taxonomy, tag_index={"semantic ramp": ["Ramp role"]})
+        untagged = decktool.contextual_strength_for_card(card, taxonomy)
+        self.assertIn("Ramp role", tagged["factors"])
+        self.assertGreater(tagged["score"], untagged["score"])
+
+    @patch.object(decktool, "load_theme_tags", return_value={
+        "semantic ramp": ["Ramp role"],
+    })
+    @patch.object(decktool, "scryfall_search")
+    def test_suggestions_use_oracle_tag_strength_when_theme_fit_ties(self, search, _tags):
+        search.return_value = [
+            {"name": "Untyped Payoff", "oracle_text": "Unusual mana wording."},
+            {"name": "Semantic Ramp", "oracle_text": "Unusual mana wording."},
+        ]
+        cards = decktool.suggestion_cards(["o:unusual"], "G", 10, set(), limit=2)
+        self.assertEqual([card["name"] for card in cards],
+                         ["Semantic Ramp", "Untyped Payoff"])
+
     def test_each_player_effect_scores_below_each_opponent(self):
         taxonomy = json.loads(Path("docs/themes.json").read_text())
         each_player = decktool.impact_for_card(
