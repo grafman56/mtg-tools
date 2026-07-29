@@ -54,7 +54,9 @@ also draws a card can count as both Ramp and Card draw.
 Potential cuts are review aids, not mandatory replacements. The tool protects
 commanders, lands, under-target baseline roles, active tribal cards, strong
 theme evidence, and meaningful table-wide multiplayer effects. It does not
-rank cards by mana value in this version.
+rank cards by mana value in this version. When a commander can blink nonland
+permanents, the tool also protects ETB cards and artifact ramp that the commander
+can reset, such as Basalt Monolith in a Brago deck.
 “Other functional roles” does not mean off-theme: death payoffs, copy targets,
 and similar build-around cards are listed under their detected themes below the
 basic ramp/draw/removal audit. Commander-enabled mechanics receive extra theme

@@ -419,16 +419,28 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
     meaningful_multiplayer_impact: 3,
   }, targets = BASELINE;
   const score = card => (card._themeMatches || 1) * 3 + impactForCard(card, tax).score;
-  const replacement = suggestions.reduce((best, card) => score(card) > score(best) ? card : best);
   const commanderKey = commander && front(commander.name).toLowerCase();
+  const blinkCommander = active.has("Blink / ETB value") && commander
+    && themeEvidenceForCard(commander, "Blink / ETB value", tax, tagIndex) === "strong"
+    && /nonland permanent/i.test(oracleOf(commander));
+  const themeSuggestions = suggestions.filter(suggestion =>
+    [...active].some(theme => themeEvidenceForCard(suggestion, theme, tax, tagIndex))
+    || (tribal && typeParts(suggestion).subtypes.includes(tribal[0])));
+  if (!themeSuggestions.length) return [];
+  const replacement = themeSuggestions.reduce((best, card) =>
+    score(card) > score(best) ? card : best);
   return cards.map((card, order) => {
     if (commanderKey && front(card.name).toLowerCase() === commanderKey) return null;
     const roles = categorize(card);
     if (roles.includes("Lands")) return null;
+    const { types, subtypes } = typeParts(card);
+    if (blinkCommander && roles.includes("Ramp") && types.includes("Artifact")) return null;
     if (roles.some(role => targets[role] && counts[role] < Math.round(targets[role] * scale))) return null;
-    const evidence = [...active].map(theme => themeEvidenceForCard(card, theme, tax, tagIndex));
+    let evidence = [...active].map(theme => themeEvidenceForCard(card, theme, tax, tagIndex));
+    if (blinkCommander && evidence.includes("weak")) {
+      evidence = evidence.map(value => value === "weak" ? "strong" : value);
+    }
     if (evidence.includes("strong")) return null;
-    const { subtypes } = typeParts(card);
     if (tribal && subtypes.includes(tribal[0])) return null;
     const impact = impactForCard(card, tax);
     if (impact.score >= policy.meaningful_multiplayer_impact) return null;
