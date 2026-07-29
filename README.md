@@ -57,8 +57,8 @@ theme evidence, and meaningful table-wide multiplayer effects. It does not rank
 cards by mana value alone. A high-cost, color-intensive, one-shot graveyard
 payoff can still receive a review prompt when the deck has overlapping graveyard
 recovery access. When a commander can blink nonland permanents, the tool also
-protects ETB cards and artifact ramp that the commander can reset, such as
-Basalt Monolith in a Brago deck.
+protects ETB cards, entering-trigger multipliers, and artifact ramp that the
+commander can reset, such as Basalt Monolith in a Brago deck.
 Lands-matter evidence includes cards that sacrifice lands for recurring value.
 The review also retains cards that cover at least two core roles, such as
 repeatable Treasure ramp plus card draw. These are safeguards, not claims that
