@@ -18,6 +18,7 @@
       { "name": "ETB trigger", "pattern": "\\benters the battlefield\\b", "weight": 1.1 }
     ]
   },
+  "max_theme_suggestions": 8,
   "themes": {
     "Sacrifice / aristocrats": {
       "strong": [
