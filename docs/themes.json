@@ -20,7 +20,7 @@
   },
   "max_theme_suggestions": 8,
   "cut_candidates": {
-    "max_results": 5,
+    "max_results": 8,
     "keep_weights": {
       "active_theme_strong": 3,
       "active_theme_weak": 1,

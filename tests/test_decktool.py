@@ -152,7 +152,7 @@ class RecommendationTests(unittest.TestCase):
 
     def test_cut_policy_has_conservative_thresholds(self):
         policy = self.taxonomy["cut_candidates"]
-        self.assertEqual(policy["max_results"], 5)
+        self.assertEqual(policy["max_results"], 8)
         self.assertGreater(policy["weak_theme_minimum_replacement_delta"],
                            policy["minimum_replacement_delta"])
 
