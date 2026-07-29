@@ -389,7 +389,7 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex = {}
   return { ranked, tribal };
 }
 
-async function themeSuggestions(queries, ident, maxPrice, deckSet, limit = 6) {
+async function themeSuggestions(queries, ident, maxPrice, deckSet, limit = 8) {
   const candidates = new Map();
   for (const q of queries) {
     const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
@@ -598,7 +598,8 @@ async function analyze() {
         const [a, b] = pair.split("|");
         if (!active.has(a) || !active.has(b)) continue;
         status(`Theme combo: ${spec.label}…`);
-        const sugg = await themeSuggestions(spec.payoffs, ident, maxPrice, deckSet);
+        const sugg = await themeSuggestions(spec.payoffs, ident, maxPrice, deckSet,
+                                             tax.max_theme_suggestions || 8);
         th += `<div class="pill-row"><b>${esc(spec.label)}</b>
                <span class="pill">both themes present</span></div>`;
         th += sugg.map(finisherCardHtml).join("");
@@ -606,7 +607,8 @@ async function analyze() {
       }
       for (const [theme, matched, queries, cmdrHit, isGoal] of jobs) {
         status(`Theme payoffs: ${theme}…`);
-        const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet);
+        const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet,
+                                             tax.max_theme_suggestions || 8);
         const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
           + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");
         th += `<div class="pill-row"><b>${esc(theme)}</b>${tags}

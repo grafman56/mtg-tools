@@ -4,6 +4,7 @@
   "weights": { "strong": 2, "weak": 1, "commander_bonus": 3 },
   "min_strong": 2,
   "max_themes": 3,
+  "max_theme_suggestions": 8,
   "themes": {
     "Sacrifice / aristocrats": {
       "strong": [
