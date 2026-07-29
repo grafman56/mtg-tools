@@ -191,6 +191,19 @@ class RecommendationTests(unittest.TestCase):
         )
         self.assertEqual(cuts, [])
 
+    def test_efficient_land_ramp_is_not_cut_from_lands_matter_deck(self):
+        farseek = {
+            "name": "Farseek", "types": ["Sorcery"], "subtypes": [], "mana_value": 2,
+            "text": "Search your library for a Plains, Island, Swamp, or Mountain card, put it onto the battlefield tapped, then shuffle.",
+        }
+        cuts = decktool.cut_candidates(
+            [farseek], [], {"Landfall / lands matter"}, None, [], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 12, "Card draw": 10,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        self.assertEqual(decktool.card_roles(farseek), ["Ramp"])
+        self.assertEqual(cuts, [])
+
     def test_blink_oracle_wording_marks_brago_and_etb_cards_as_theme_support(self):
         brago = {"name": "Brago, King Eternal", "types": ["Legendary", "Creature"],
                  "subtypes": ["Spirit"], "text": "Whenever Brago deals combat damage to a player, exile any number of target nonland permanents you control, then return those cards to the battlefield under their owner's control."}

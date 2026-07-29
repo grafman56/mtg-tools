@@ -199,7 +199,7 @@ def card_roles(card):
     if "Land" in types:
         return ["Lands"]
     roles = []
-    if re.search(r"add \{|add (one|two|three|x) mana|create (a|one|two|three|x) treasure tokens?|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast", text):
+    if re.search(r"add \{|add (one|two|three|x) mana|create (a|one|two|three|x) treasure tokens?|search your library for .{0,30}(land|plains|island|swamp|mountain|forest) card,? put it onto the battlefield|spells? you cast cost .{0,12} less to cast", text):
         roles.append("Ramp")
     if re.search(r"draw (a|one|two|three|four|five|six|seven|x|\d+|that many) cards?\b|draw cards? equal to", text):
         roles.append("Card draw")
@@ -220,6 +220,12 @@ def token_linked_draw(card):
 
 def creates_creature_tokens(card):
     return bool(re.search(r"create .{0,40}creature tokens?", oracle_text(card), re.I))
+
+
+def efficient_role_card(card):
+    """Return whether a low-cost card performs a core role efficiently."""
+    mana_value = card.get("mana_value", card.get("cmc"))
+    return mana_value is not None and mana_value <= 2 and "Ramp" in card_roles(card)
 
 
 def theme_evidence_for_card(card, theme, taxonomy, tag_index=None):
@@ -275,6 +281,8 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         if "Lands" in roles:
             continue
         if len([role for role in roles if role in ROLE_TARGETS]) >= 2:
+            continue
+        if efficient_role_card(card):
             continue
         if token_production and token_linked_draw(card):
             continue
@@ -345,7 +353,8 @@ def deck_card_data(arg, commanders, main):
             out.append({"name": oc["name"], "qty": entry["quantity"],
                         "text": oc.get("text") or "",
                         "types": oc.get("types") or [],
-                        "subtypes": oc.get("subTypes") or []})
+                        "subtypes": oc.get("subTypes") or [],
+                        "mana_value": oc.get("cmc")})
         return out
     # text decklist: fetch oracle data in batches from Scryfall
     out = []
@@ -361,7 +370,8 @@ def deck_card_data(arg, commanders, main):
             types = re.split(r"\s+", tl.split("—")[0].strip())
             subtypes = re.split(r"\s+", tl.split("—")[1].strip()) if "—" in tl else []
             out.append({"name": c["name"], "qty": main.get(c["name"], 1),
-                        "text": text, "types": types, "subtypes": subtypes})
+                        "text": text, "types": types, "subtypes": subtypes,
+                        "mana_value": c.get("cmc")})
     return out
 
 
