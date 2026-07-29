@@ -210,6 +210,18 @@ def card_roles(card):
     return roles or ["Other"]
 
 
+def token_linked_draw(card):
+    """Return whether a draw engine benefits from token or creature entries."""
+    if "Card draw" not in card_roles(card):
+        return False
+    text = oracle_text(card).lower()
+    return bool(re.search(r"token|creatures?.{0,35}enter", text))
+
+
+def creates_creature_tokens(card):
+    return bool(re.search(r"create .{0,40}creature tokens?", oracle_text(card), re.I))
+
+
 def theme_evidence_for_card(card, theme, taxonomy, tag_index=None):
     """Return strong, weak, or no evidence for one card and active theme."""
     spec = taxonomy["themes"][theme]
@@ -244,6 +256,7 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
     weights = policy["keep_weights"]
     role_counts = role_counts or functional_role_counts(cards)
     scale = scale if scale is not None else min(1, sum(c.get("qty", 1) for c in cards) / 99)
+    token_production = any(creates_creature_tokens(card) for card in cards)
     commander_keys = {front(name).lower() for name in commanders}
     tribal_type = tribal[0] if tribal else None
     blink_theme = "Blink / ETB value" in active_themes
@@ -262,6 +275,8 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         if "Lands" in roles:
             continue
         if len([role for role in roles if role in ROLE_TARGETS]) >= 2:
+            continue
+        if token_production and token_linked_draw(card):
             continue
         types = card.get("types") or re.split(
             r"\s+", (card.get("type_line") or "").split("—")[0])
@@ -369,10 +384,12 @@ def detect_themes(cards, taxonomy, commanders=(), tagged_themes=(), tag_index=No
         pat = None if weighted else re.compile("|".join(spec["detect"]), re.IGNORECASE)
         tagged_names = {name.lower() for name, themes in tag_index.items()
                         if theme in themes}
-        matched, strong_n, weak_n, cmdr_hit = [], 0, 0, theme in tagged_themes
+        matched, strong_n, weak_n, cmdr_hit = [], 0, 0, False
         for c in cards:
             text, name = c["text"], c["name"]
-            tagged = front(name).lower() in tagged_names
+            is_commander = front(name).lower() in cmdr_keys
+            tagged = (front(name).lower() in tagged_names or
+                      (is_commander and theme in tagged_themes))
             strong = weighted and bool(strong_pat.search(text))
             weak = weighted and not strong and bool(weak_pat.search(text))
             legacy = not weighted and bool(pat.search(text))
@@ -381,7 +398,7 @@ def detect_themes(cards, taxonomy, commanders=(), tagged_themes=(), tag_index=No
             matched.append(name)
             strong_n += int(strong or tagged)
             weak_n += int(weak or legacy)
-            cmdr_hit = cmdr_hit or front(name).lower() in cmdr_keys
+            cmdr_hit = cmdr_hit or (is_commander and (strong or legacy))
         score = (strong_n * weights["strong"] + weak_n * weights["weak"] +
                  (weights.get("commander_bonus", 3) if cmdr_hit else 0))
         if weighted:

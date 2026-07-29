@@ -44,7 +44,7 @@ class ThemeTests(unittest.TestCase):
         ranked, _ = decktool.detect_themes(
             cards, self.taxonomy, ["Tagged Commander"], {"Landfall / lands matter"})
         landfall = next(row for row in ranked if row[0] == "Landfall / lands matter")
-        self.assertEqual(landfall, ("Landfall / lands matter", [], True))
+        self.assertEqual(landfall, ("Landfall / lands matter", ["Tagged Commander"], False))
 
     def test_tag_index_adds_card_as_theme_evidence(self):
         cards = [{"name": "Semantic Match", "text": "Vigilance",
@@ -129,6 +129,21 @@ class ThemeTests(unittest.TestCase):
         self.assertIsNone(decktool.theme_evidence_for_card(
             nonland_sacrifice, "Landfall / lands matter", self.taxonomy))
 
+    def test_semantic_tag_does_not_label_unrelated_commander_as_blink_theme(self):
+        necrobloom = {
+            "name": "The Necrobloom", "types": ["Legendary", "Creature"],
+            "subtypes": ["Plant"],
+            "text": "Landfall — Whenever a land you control enters, create a 0/1 green Plant creature token. Land cards in your graveyard have dredge 2.",
+        }
+        etb_card = {
+            "name": "ETB Value", "types": ["Creature"], "subtypes": [],
+            "text": "When this creature enters, draw a card.",
+        }
+        ranked, _ = decktool.detect_themes(
+            [necrobloom, etb_card], self.taxonomy,
+            ["The Necrobloom"], {"Blink / ETB value"})
+        self.assertNotIn("Blink / ETB value", {row[0] for row in ranked})
+
 
 class RecommendationTests(unittest.TestCase):
     @classmethod
@@ -156,6 +171,24 @@ class RecommendationTests(unittest.TestCase):
                          "Interaction": 10, "Board wipes": 3}, scale=1,
         )
         self.assertEqual(decktool.card_roles(black_market_connections), ["Ramp", "Card draw"])
+        self.assertEqual(cuts, [])
+
+    def test_token_linked_draw_is_protected_when_deck_creates_tokens(self):
+        necrobloom = {
+            "name": "The Necrobloom", "types": ["Legendary", "Creature"],
+            "subtypes": ["Plant"],
+            "text": "Landfall — Whenever a land you control enters, create a 0/1 green Plant creature token.",
+        }
+        tocasias_welcome = {
+            "name": "Tocasia's Welcome", "types": ["Enchantment"], "subtypes": [],
+            "text": "Whenever one or more creatures with mana value 3 or less enter, draw a card. This ability triggers only once each turn.",
+        }
+        cuts = decktool.cut_candidates(
+            [necrobloom, tocasias_welcome], [],
+            {"Landfall / lands matter"}, None, ["The Necrobloom"], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 10, "Card draw": 12,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
         self.assertEqual(cuts, [])
 
     def test_blink_oracle_wording_marks_brago_and_etb_cards_as_theme_support(self):

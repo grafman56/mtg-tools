@@ -346,8 +346,8 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex = {}
     const commanderTags = cmdrCard ? (tagIndex[front(cmdrCard.name).toLowerCase()] || []) : [];
     const tagged = commanderTags.includes(theme);
     const commanderText = cmdrCard ? oracleOf(cmdrCard) : "";
-    const cmdrHit = tagged || !!(cmdrCard && (weighted
-      ? (strongPat.test(commanderText) || weakPat.test(commanderText))
+    const cmdrHit = !!(cmdrCard && (weighted
+      ? strongPat.test(commanderText)
       : pat.test(commanderText)));
     const isGoal = goalThemes.has(theme);
     const w = tax.weights || { strong: 2, weak: 1, commander_bonus: 3 };
@@ -409,6 +409,15 @@ function themeEvidenceForCard(card, theme, tax, tagIndex) {
   return new RegExp(spec.detect.join("|"), "i").test(text) ? "strong" : null;
 }
 
+function tokenLinkedDraw(card) {
+  return categorize(card).includes("Card draw")
+    && /token|creatures?.{0,35}enter/i.test(oracleOf(card));
+}
+
+function createsCreatureTokens(card) {
+  return /create .{0,40}creature tokens?/i.test(oracleOf(card));
+}
+
 function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts, scale, tax, tagIndex) {
   if ((!active || !active.size) && !tribal) return [];
   const policy = tax.cut_candidates || {
@@ -422,11 +431,13 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
   const blinkCommander = active.has("Blink / ETB value") && commander
     && themeEvidenceForCard(commander, "Blink / ETB value", tax, tagIndex) === "strong"
     && /nonland permanent/i.test(oracleOf(commander));
+  const tokenProduction = cards.some(createsCreatureTokens);
   return cards.map((card, order) => {
     if (commanderKey && front(card.name).toLowerCase() === commanderKey) return null;
     const roles = categorize(card);
     if (roles.includes("Lands")) return null;
     if (roles.filter(role => targets[role]).length >= 2) return null;
+    if (tokenProduction && tokenLinkedDraw(card)) return null;
     const { types, subtypes } = typeParts(card);
     if (blinkCommander && roles.includes("Ramp") && types.includes("Artifact")) return null;
     if (roles.some(role => targets[role] && counts[role] < Math.round(targets[role] * scale))) return null;
