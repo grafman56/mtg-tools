@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Any
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -63,7 +64,22 @@ def fetch_tag_cards(tag):
     return sorted(cards)
 
 
-def build_index(taxonomy, cache_path, output_path, fetch_cards, max_new_tags=1):
+def record_rate_limit(cache_path, error, now=None):
+    """Persist Scryfall's retry deadline without replacing the static index."""
+    cache: dict[str, Any] = (json.loads(cache_path.read_text(encoding="utf-8"))
+                             if cache_path.exists() else {"tags": {}})
+    header = error.headers.get("Retry-After") if error.headers else None
+    try:
+        delay = int(header) if header is not None else 300
+    except ValueError:
+        delay = 300
+    retry_after = int((time.time() if now is None else now) + max(delay, 1))
+    cache["retry_after"] = retry_after
+    write_json(cache_path, cache)
+    return retry_after
+
+
+def build_index(taxonomy, cache_path, output_path, fetch_cards, max_new_tags=1, now=None):
     """Build the static browser index, fetching at most one missing tag per run."""
     if cache_path.exists():
         cache = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -71,6 +87,10 @@ def build_index(taxonomy, cache_path, output_path, fetch_cards, max_new_tags=1):
         cache = seed_cache(taxonomy, output_path)
         write_json(cache_path, cache)
     tags = cache.setdefault("tags", {})
+    retry_value = cache.get("retry_after", 0)
+    retry_after = float(retry_value) if isinstance(retry_value, (int, float, str)) else 0
+    if retry_after > (time.time() if now is None else now):
+        return False
     fetched = 0
     for tag, _label in tag_specs(taxonomy):
         if tag in tags:
@@ -98,7 +118,9 @@ def main():
         complete = build_index(taxonomy, CACHE_PATH, OUTPUT_PATH, fetch_tag_cards)
     except urllib.error.HTTPError as error:
         if error.code == 429:
-            print("Scryfall rate limited this tag. The existing static index is unchanged.")
+            retry_after = record_rate_limit(CACHE_PATH, error)
+            print("Scryfall rate limited this tag. The existing static index is unchanged. "
+                  f"Retry after {retry_after}.")
             return
         raise
     if not complete:
