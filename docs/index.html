@@ -410,7 +410,7 @@ function themeEvidenceForCard(card, theme, tax, tagIndex) {
 }
 
 function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts, scale, tax, tagIndex) {
-  if ((!active || !active.size) && !tribal || !suggestions.length) return [];
+  if ((!active || !active.size) && !tribal) return [];
   const policy = tax.cut_candidates || {
     max_results: 5,
     keep_weights: { active_theme_weak: 1 },
@@ -418,17 +418,10 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
     weak_theme_minimum_replacement_delta: 4,
     meaningful_multiplayer_impact: 3,
   }, targets = BASELINE;
-  const score = card => (card._themeMatches || 1) * 3 + impactForCard(card, tax).score;
   const commanderKey = commander && front(commander.name).toLowerCase();
   const blinkCommander = active.has("Blink / ETB value") && commander
     && themeEvidenceForCard(commander, "Blink / ETB value", tax, tagIndex) === "strong"
     && /nonland permanent/i.test(oracleOf(commander));
-  const themeSuggestions = suggestions.filter(suggestion =>
-    [...active].some(theme => themeEvidenceForCard(suggestion, theme, tax, tagIndex))
-    || (tribal && typeParts(suggestion).subtypes.includes(tribal[0])));
-  if (!themeSuggestions.length) return [];
-  const replacement = themeSuggestions.reduce((best, card) =>
-    score(card) > score(best) ? card : best);
   return cards.map((card, order) => {
     if (commanderKey && front(card.name).toLowerCase() === commanderKey) return null;
     const roles = categorize(card);
@@ -445,15 +438,13 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
     const impact = impactForCard(card, tax);
     if (impact.score >= policy.meaningful_multiplayer_impact) return null;
     const weak = evidence.filter(x => x === "weak").length;
+    if (weak) return null;
     const keep = weak * policy.keep_weights.active_theme_weak + impact.score;
-    const delta = score(replacement) - keep;
-    const threshold = weak ? policy.weak_theme_minimum_replacement_delta : policy.minimum_replacement_delta;
-    if (delta < threshold) return null;
     const reasons = [weak ? "weak active-theme evidence only" : "no active-theme evidence",
       roles.length === 1 && roles[0] === "Other" ? "Other functional role" : `${roles.join(", ")} is above target`];
     if (!impact.score) reasons.push("no multiplayer impact");
-    return { card, reasons, replacement, delta, keep, order };
-  }).filter(Boolean).sort((a, b) => b.delta - a.delta || a.keep - b.keep || a.order - b.order)
+    return { card, reasons, keep, order };
+  }).filter(Boolean).sort((a, b) => a.keep - b.keep || a.order - b.order)
     .slice(0, policy.max_results);
 }
 
@@ -695,9 +686,9 @@ async function analyze() {
       }
       const cuts = cutCandidatesWeb(cardObjs, allThemeSuggestions, active, tribal,
                                     cmdrCard, counts, scale, tax, tagIndex);
-      th += `<h2>Potential cuts to review</h2><div class="hint">This is a review aid, not a one-for-one replacement rule.</div>`;
+      th += `<h2>Potential cuts to review</h2><div class="hint">This is a review aid. Theme suggestions above are additions to compare separately, not one-for-one replacements.</div>`;
       th += cuts.length ? cuts.map(cut => `<div class="finisher"><div class="name">${cardLink(cut.card.name)}</div>
-        <div class="text">Why: ${esc(cut.reasons.join("; "))}.<br>Possible upgrade: ${cardLink(cut.replacement.name)}.</div></div>`).join("")
+        <div class="text">Why: ${esc(cut.reasons.join("; "))}.</div></div>`).join("")
         : `<div class="hint">No low-confidence cuts found without weakening a protected role.</div>`;
       $("themes").innerHTML = th;
     }

@@ -202,10 +202,11 @@ ranking is really giving, instead of treating it as an arbitrary order.
 Potential cuts use the opposite, conservative comparison. A card must have no
 strong active-theme or tribal evidence, no protected functional role, and no
 meaningful multiplayer impact before the tool can flag it. Weak theme evidence
-requires a larger gap to the best incoming suggestion. The result remains a
-review aid because Oracle-text heuristics cannot prove that a card is bad in a
-specific deck. Mana value stays out of this comparison until the tool has deck
-curve and effect-size context.
+is protected in this first pass. The tool lists additions separately, because a
+potential cut does not prove that one specific incoming card is its replacement.
+The result remains a review aid because Oracle-text heuristics cannot prove that
+a card is bad in a specific deck. Mana value stays out of this comparison until
+the tool has deck curve and effect-size context.
 
 Commander context can strengthen this protection. A commander that can blink
 nonland permanents makes ETB cards and artifact ramp deck-specific resources.
