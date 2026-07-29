@@ -199,14 +199,16 @@ matches.
 down (in a comment, in the docs) so the next person understands the advice the
 ranking is really giving, instead of treating it as an arbitrary order.
 
-Potential cuts use the opposite, conservative comparison. A card must have no
-strong active-theme or tribal evidence, no protected functional role, and no
-meaningful multiplayer impact before the tool can flag it. Weak theme evidence
-is protected in this first pass. The tool lists additions separately, because a
-potential cut does not prove that one specific incoming card is its replacement.
-The result remains a review aid because Oracle-text heuristics cannot prove that
-a card is bad in a specific deck. Mana value stays out of this comparison until
-the tool has deck curve and effect-size context.
+Potential cuts use the opposite, conservative comparison. A card must usually
+have no strong active-theme or tribal evidence, no protected functional role,
+and no meaningful multiplayer impact before the tool can flag it. A bounded
+exception reviews a scalable, one-shot graveyard recovery sorcery only when it
+has high mana and color commitment and the deck has overlapping recovery access.
+This compares a card's investment and redundancy with its theme evidence, not
+mana value by itself. Weak theme evidence remains protected. The tool lists
+additions separately, because a potential cut does not prove that one specific
+incoming card is its replacement. The result remains a review aid because
+Oracle-text heuristics cannot prove that a card is bad in a specific deck.
 
 Commander context can strengthen this protection. A commander that can blink
 nonland permanents makes ETB cards and artifact ramp deck-specific resources.

@@ -228,6 +228,35 @@ def efficient_role_card(card):
     return mana_value is not None and mana_value <= 2 and "Ramp" in card_roles(card)
 
 
+def is_graveyard_recovery(card):
+    """Return whether a card restores or reuses cards from the graveyard."""
+    text = oracle_text(card).lower()
+    return bool(re.search(
+        r"from (your|a) graveyard.{0,100}(battlefield|cast)|play lands? from your graveyard",
+        text,
+    ))
+
+
+def high_commitment_graveyard_payoff(card, cards, policy):
+    """Return whether a scalable one-shot recovery spell merits a review prompt."""
+    text = oracle_text(card).lower()
+    types = card.get("types") or re.split(
+        r"\s+", (card.get("type_line") or "").split("—")[0])
+    mana_value = card.get("mana_value", card.get("cmc", 0))
+    pips = re.findall(r"\{([WUBRG])\}", card.get("mana_cost", ""))
+    overlap = sum(other is not card and is_graveyard_recovery(other) for other in cards)
+    settings = policy["high_commitment_graveyard_review"]
+    eligible = (
+        "Sorcery" in types
+        and re.search(r"return any number of .{0,80}from your graveyard", text)
+        and mana_value >= settings["minimum_mana_value"]
+        and len(pips) >= settings["minimum_colored_pips"]
+        and len(set(pips)) >= settings["minimum_distinct_colors"]
+        and overlap >= settings["minimum_recovery_overlap"]
+    )
+    return eligible, overlap
+
+
 def theme_evidence_for_card(card, theme, taxonomy, tag_index=None):
     """Return strong, weak, or no evidence for one card and active theme."""
     spec = taxonomy["themes"][theme]
@@ -298,7 +327,9 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
                     for theme in active_themes]
         if blink_commander and evidence.count("weak"):
             evidence = ["strong" if value == "weak" else value for value in evidence]
-        if "strong" in evidence:
+        high_commitment, recovery_overlap = high_commitment_graveyard_payoff(
+            card, cards, policy)
+        if "strong" in evidence and not high_commitment:
             continue
         if tribal_type and tribal_type in card.get("subtypes", []):
             continue
@@ -309,8 +340,15 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         if weak:
             continue
         keep_score = weak * weights["active_theme_weak"] + impact["score"]
-        reasons = (["weak active-theme evidence only"] if weak
+        reasons = (["strong active-theme evidence"] if high_commitment
+                   else ["weak active-theme evidence only"] if weak
                    else ["no active-theme evidence"])
+        if high_commitment:
+            keep_score -= policy["high_commitment_graveyard_review"]["review_risk"]
+            reasons.extend([
+                "high mana and color commitment",
+                f"one-shot graveyard recovery overlaps {recovery_overlap} other recovery cards",
+            ])
         reasons.append("Other functional role" if roles == ["Other"]
                        else ", ".join(roles) + " is above target")
         if not impact["score"]:
@@ -354,7 +392,8 @@ def deck_card_data(arg, commanders, main):
                         "text": oc.get("text") or "",
                         "types": oc.get("types") or [],
                         "subtypes": oc.get("subTypes") or [],
-                        "mana_value": oc.get("cmc")})
+                        "mana_value": oc.get("cmc"),
+                        "mana_cost": oc.get("manaCost")})
         return out
     # text decklist: fetch oracle data in batches from Scryfall
     out = []
@@ -371,7 +410,8 @@ def deck_card_data(arg, commanders, main):
             subtypes = re.split(r"\s+", tl.split("—")[1].strip()) if "—" in tl else []
             out.append({"name": c["name"], "qty": main.get(c["name"], 1),
                         "text": text, "types": types, "subtypes": subtypes,
-                        "mana_value": c.get("cmc")})
+                        "mana_value": c.get("cmc"),
+                        "mana_cost": c.get("mana_cost")})
     return out
 
 
