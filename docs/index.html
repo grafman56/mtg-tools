@@ -225,7 +225,7 @@ function categorize(card) {
   const t = card.type_line || "", o = oracleOf(card), ol = o.toLowerCase();
   if (/\bLand\b/.test(t)) return ["Lands"];
   const roles = [];
-  if (/add \{|add (one|two|three|x) mana|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast/i.test(o)
+  if (/add \{|add (one|two|three|x) mana|create (a|one|two|three|x) treasure tokens?|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast/i.test(o)
       && !/\bCreature\b.*\bAura\b/.test(t)) roles.push("Ramp");
   if (/draw (a|one|two|three|four|five|six|seven|x|\d+|that many) cards?\b|draw cards? equal to/.test(ol))
     roles.push("Card draw");
@@ -426,6 +426,7 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
     if (commanderKey && front(card.name).toLowerCase() === commanderKey) return null;
     const roles = categorize(card);
     if (roles.includes("Lands")) return null;
+    if (roles.filter(role => targets[role]).length >= 2) return null;
     const { types, subtypes } = typeParts(card);
     if (blinkCommander && roles.includes("Ramp") && types.includes("Artifact")) return null;
     if (roles.some(role => targets[role] && counts[role] < Math.round(targets[role] * scale))) return null;

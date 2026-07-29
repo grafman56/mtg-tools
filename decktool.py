@@ -199,7 +199,7 @@ def card_roles(card):
     if "Land" in types:
         return ["Lands"]
     roles = []
-    if re.search(r"add \{|add (one|two|three|x) mana|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast", text):
+    if re.search(r"add \{|add (one|two|three|x) mana|create (a|one|two|three|x) treasure tokens?|search your library for .* land .*onto the battlefield|spells? you cast cost .{0,12} less to cast", text):
         roles.append("Ramp")
     if re.search(r"draw (a|one|two|three|four|five|six|seven|x|\d+|that many) cards?\b|draw cards? equal to", text):
         roles.append("Card draw")
@@ -260,6 +260,8 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
             continue
         roles = card_roles(card)
         if "Lands" in roles:
+            continue
+        if len([role for role in roles if role in ROLE_TARGETS]) >= 2:
             continue
         types = card.get("types") or re.split(
             r"\s+", (card.get("type_line") or "").split("—")[0])
