@@ -67,7 +67,8 @@
       "oracle_tags": ["blink"],
       "strong": [
         "exile .{0,100}, then return (it|that card|them|those cards) to the battlefield",
-        "return (it|them) to the battlefield"
+        "return (it|them) to the battlefield",
+        "if .{0,45} entering( the battlefield)? causes? a triggered ability.{0,80}triggers? an additional time"
       ],
       "weak": [
         "when(ever)? .{0,40} enters( the battlefield)?"

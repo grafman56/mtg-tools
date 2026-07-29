@@ -253,6 +253,8 @@ class RecommendationTests(unittest.TestCase):
              "text": "This artifact doesn't untap during your untap step. {T}: Add {C}{C}{C}. {3}: Untap this artifact."},
             {"name": "Cloud of Faeries", "types": ["Creature"], "subtypes": [],
              "text": "When this creature enters, untap up to two lands."},
+            {"name": "Entry Trigger Multiplier", "types": ["Creature"], "subtypes": [],
+             "text": "If a permanent entering causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time."},
             {"name": "Off Theme", "types": ["Creature"], "subtypes": [], "text": "Flying"},
         ]
         suggestions = [
