@@ -253,17 +253,6 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         and "nonland permanent" in oracle_text(card).lower()
         for card in cards)
 
-    def suggestion_score(card):
-        return card.get("_theme_matches", 1) * 3 + impact_for_card(card, taxonomy)["score"]
-
-    suggestions = [suggestion for suggestion in suggestions if any(
-        theme_evidence_for_card(suggestion, theme, taxonomy, tag_index)
-        for theme in active_themes) or (
-            tribal_type and tribal_type in suggestion.get("subtypes", []))]
-    if not suggestions:
-        return []
-    replacement = max(suggestions, key=suggestion_score)
-    replacement_score = suggestion_score(replacement)
     results = []
     for order, card in enumerate(cards):
         name = card["name"]
@@ -292,12 +281,9 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         if impact["score"] >= policy["meaningful_multiplayer_impact"]:
             continue
         weak = evidence.count("weak")
-        keep_score = weak * weights["active_theme_weak"] + impact["score"]
-        delta = replacement_score - keep_score
-        threshold = (policy["weak_theme_minimum_replacement_delta"] if weak
-                     else policy["minimum_replacement_delta"])
-        if delta < threshold:
+        if weak:
             continue
+        keep_score = weak * weights["active_theme_weak"] + impact["score"]
         reasons = (["weak active-theme evidence only"] if weak
                    else ["no active-theme evidence"])
         reasons.append("Other functional role" if roles == ["Other"]
@@ -305,10 +291,9 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         if not impact["score"]:
             reasons.append("no multiplayer impact")
         results.append({"name": name, "keep_score": keep_score,
-                        "replacement_delta": delta, "reasons": reasons,
-                        "roles": roles, "impact": impact,
-                        "replacement": replacement, "order": order})
-    results.sort(key=lambda item: (-item["replacement_delta"], item["keep_score"], item["order"]))
+                        "reasons": reasons, "roles": roles,
+                        "impact": impact, "order": order})
+    results.sort(key=lambda item: (item["keep_score"], item["order"]))
     return results[:policy["max_results"]]
 
 
@@ -320,15 +305,7 @@ def print_cut_candidates(cuts, taxonomy):
         print("   No low-confidence cuts found without weakening a protected role.\n")
         return
     for cut in cuts:
-        replacement = cut["replacement"]
-        impact = impact_for_card(replacement, taxonomy)
         print(f"   - {cut['name']}: {'; '.join(cut['reasons'])}.")
-        match_count = replacement.get("_theme_matches", 1)
-        detail = (f"matches {match_count} active theme "
-                  f"{'query' if match_count == 1 else 'queries'}")
-        if impact["score"]:
-            detail += f"; {impact['scope']}; {impact['delivery']}"
-        print(f"     Possible upgrade: {replacement['name']} ({detail}).")
     print()
 
 

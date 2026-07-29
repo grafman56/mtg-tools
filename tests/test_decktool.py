@@ -171,7 +171,7 @@ class RecommendationTests(unittest.TestCase):
                          "Interaction": 10, "Board wipes": 3}, scale=1,
         )
         self.assertEqual([cut["name"] for cut in cuts], ["Off Theme"])
-        self.assertEqual(cuts[0]["replacement"]["name"], "Blink Payoff")
+        self.assertNotIn("replacement", cuts[0])
 
     def test_cut_candidates_keep_strong_theme_and_protected_roles(self):
         cards = [
@@ -194,7 +194,7 @@ class RecommendationTests(unittest.TestCase):
             role_counts={"Lands": 37, "Ramp": 0, "Card draw": 10,
                          "Interaction": 10, "Board wipes": 3}, scale=1,
         )
-        self.assertEqual([cut["name"] for cut in cuts], ["Off Theme", "Weak Sacrifice"])
+        self.assertEqual([cut["name"] for cut in cuts], ["Off Theme"])
 
     def test_cut_candidates_require_theme_confidence(self):
         cards = [{"name": "Off Theme", "text": "Flying",
@@ -204,18 +204,16 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual(
             decktool.cut_candidates(cards, [suggestion], set(), None, [], self.taxonomy), [])
 
-    def test_print_cut_candidates_shows_review_reasons_and_replacement(self):
+    def test_print_cut_candidates_shows_review_reasons_without_universal_replacement(self):
         cut = {
             "name": "Off Theme", "reasons": ["no active-theme evidence", "no multiplayer impact"],
-            "replacement": {"name": "Table Replacement", "oracle_text":
-                            "Each opponent loses 1 life."},
         }
         with patch("builtins.print") as printed:
             decktool.print_cut_candidates([cut], self.taxonomy)
         output = "\n".join(" ".join(map(str, call.args)) for call in printed.call_args_list)
         self.assertIn("Potential cuts to review", output)
         self.assertIn("Off Theme", output)
-        self.assertIn("Table Replacement", output)
+        self.assertNotIn("Possible upgrade", output)
         self.assertIn("review aid", output)
 
     def test_print_themes_includes_cut_review_from_returned_suggestions(self):
