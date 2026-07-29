@@ -6,7 +6,9 @@ deck and one card away, detects the deck's themes, and suggests **finite** (non-
 infinite) game-enders in the deck's colors and budget, ranked by what people
 actually play. When theme fit ties, multiplayer suggestions rank table-wide
 effects above target-opponent effects. The output explains the detected scope
-and delivery type.
+and delivery type. Theme analysis also shows conservative potential cuts to
+review when an unprotected card has weak theme support and a higher-value
+incoming suggestion exists.
 
 It is a recommender, not a rules engine. The work is done by three community
 services (Scryfall for cards, Commander Spellbook for combos, EDHREC for
@@ -49,6 +51,10 @@ batched lookup; displaying the links makes no additional network requests.
 Cards banned in Commander are flagged at the top and beside their names, but
 analysis continues. Functional roles may overlap: for example, a mana rock that
 also draws a card can count as both Ramp and Card draw.
+Potential cuts are review aids, not mandatory replacements. The tool protects
+commanders, lands, under-target baseline roles, active tribal cards, strong
+theme evidence, and meaningful table-wide multiplayer effects. It does not
+rank cards by mana value in this version.
 “Other functional roles” does not mean off-theme: death payoffs, copy targets,
 and similar build-around cards are listed under their detected themes below the
 basic ramp/draw/removal audit. Commander-enabled mechanics receive extra theme

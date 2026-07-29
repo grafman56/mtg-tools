@@ -398,6 +398,47 @@ function impactForCard(card, tax) {
   return { score: scope.weight * delivery.weight, scope: scope.name, delivery: delivery.name };
 }
 
+function themeEvidenceForCard(card, theme, tax, tagIndex) {
+  const spec = tax.themes[theme], text = oracleOf(card);
+  if ((tagIndex[front(card.name).toLowerCase()] || []).includes(theme)) return "strong";
+  if (spec.strong || spec.weak) {
+    if (new RegExp((spec.strong || []).join("|") || "(?!x)x", "i").test(text)) return "strong";
+    if (new RegExp((spec.weak || []).join("|") || "(?!x)x", "i").test(text)) return "weak";
+    return null;
+  }
+  return new RegExp(spec.detect.join("|"), "i").test(text) ? "strong" : null;
+}
+
+function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts, scale, tax, tagIndex) {
+  if ((!active || !active.size) && !tribal || !suggestions.length) return [];
+  const policy = tax.cut_candidates, targets = BASELINE;
+  const score = card => (card._themeMatches || 1) * 3 + impactForCard(card, tax).score;
+  const replacement = suggestions.reduce((best, card) => score(card) > score(best) ? card : best);
+  const commanderKey = commander && front(commander.name).toLowerCase();
+  return cards.map((card, order) => {
+    if (commanderKey && front(card.name).toLowerCase() === commanderKey) return null;
+    const roles = categorize(card);
+    if (roles.includes("Lands")) return null;
+    if (roles.some(role => targets[role] && counts[role] < Math.round(targets[role] * scale))) return null;
+    const evidence = [...active].map(theme => themeEvidenceForCard(card, theme, tax, tagIndex));
+    if (evidence.includes("strong")) return null;
+    const { subtypes } = typeParts(card);
+    if (tribal && subtypes.includes(tribal[0])) return null;
+    const impact = impactForCard(card, tax);
+    if (impact.score >= policy.meaningful_multiplayer_impact) return null;
+    const weak = evidence.filter(x => x === "weak").length;
+    const keep = weak * policy.keep_weights.active_theme_weak + impact.score;
+    const delta = score(replacement) - keep;
+    const threshold = weak ? policy.weak_theme_minimum_replacement_delta : policy.minimum_replacement_delta;
+    if (delta < threshold) return null;
+    const reasons = [weak ? "weak active-theme evidence only" : "no active-theme evidence",
+      roles.length === 1 && roles[0] === "Other" ? "Other functional role" : `${roles.join(", ")} is above target`];
+    if (!impact.score) reasons.push("no multiplayer impact");
+    return { card, reasons, replacement, delta, keep, order };
+  }).filter(Boolean).sort((a, b) => b.delta - a.delta || a.keep - b.keep || a.order - b.order)
+    .slice(0, policy.max_results);
+}
+
 async function themeSuggestions(queries, ident, maxPrice, deckSet, tax, limit = 8) {
   const candidates = new Map();
   for (const q of queries) {
@@ -416,7 +457,7 @@ async function themeSuggestions(queries, ident, maxPrice, deckSet, tax, limit = 
       || impactForCard(b.card, tax).score - impactForCard(a.card, tax).score
       || a.order - b.order)
     .slice(0, limit)
-    .map(c => c.card);
+    .map(c => ({ ...c.card, _themeMatches: c.matches }));
 }
 
 function finisherCardHtml(c) {
@@ -608,12 +649,14 @@ async function analyze() {
       // Theme pairs get intersection suggestions first — cards that serve
       // BOTH mechanics beat cards that serve one.
       const active = new Set(themesRanked.map(([t]) => t));
+      const allThemeSuggestions = [];
       for (const [pair, spec] of Object.entries(tax.intersections || {})) {
         const [a, b] = pair.split("|");
         if (!active.has(a) || !active.has(b)) continue;
         status(`Theme combo: ${spec.label}…`);
         const sugg = await themeSuggestions(spec.payoffs, ident, maxPrice, deckSet,
                                              tax, tax.max_theme_suggestions || 8);
+        allThemeSuggestions.push(...sugg);
         th += `<div class="pill-row"><b>${esc(spec.label)}</b>
                <span class="pill">both themes present</span></div>`;
         th += sugg.map(finisherCardHtml).join("");
@@ -623,6 +666,7 @@ async function analyze() {
         status(`Theme payoffs: ${theme}…`);
         const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet,
                                              tax, tax.max_theme_suggestions || 8);
+        allThemeSuggestions.push(...sugg);
         const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
           + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");
         th += `<div class="pill-row"><b>${esc(theme)}</b>${tags}
@@ -631,6 +675,13 @@ async function analyze() {
                           : `<div class="hint">nothing new in identity/budget</div>`;
         $("themes").innerHTML = th;
       }
+      const cuts = cutCandidatesWeb(cardObjs, allThemeSuggestions, active, tribal,
+                                    cmdrCard, counts, scale, tax, tagIndex);
+      th += `<h2>Potential cuts to review</h2><div class="hint">This is a review aid, not a one-for-one replacement rule.</div>`;
+      th += cuts.length ? cuts.map(cut => `<div class="finisher"><div class="name">${cardLink(cut.card.name)}</div>
+        <div class="text">Why: ${esc(cut.reasons.join("; "))}.<br>Possible upgrade: ${cardLink(cut.replacement.name)}.</div></div>`).join("")
+        : `<div class="hint">No low-confidence cuts found without weakening a protected role.</div>`;
+      $("themes").innerHTML = th;
     }
 
     // EDHREC synergy — cards overrepresented for THIS commander

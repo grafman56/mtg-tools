@@ -117,6 +117,76 @@ class ThemeTests(unittest.TestCase):
 
 
 class RecommendationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.taxonomy = json.loads(Path("docs/themes.json").read_text())
+
+    def test_cut_policy_has_conservative_thresholds(self):
+        policy = self.taxonomy["cut_candidates"]
+        self.assertEqual(policy["max_results"], 5)
+        self.assertGreater(policy["weak_theme_minimum_replacement_delta"],
+                           policy["minimum_replacement_delta"])
+
+    def test_cut_candidates_keep_strong_theme_and_protected_roles(self):
+        cards = [
+            {"name": "Commander", "text": "Sacrifice another creature: Draw a card.",
+             "types": ["Creature"], "subtypes": []},
+            {"name": "Strong Payoff", "text": "Whenever another creature dies, draw a card.",
+             "types": ["Creature"], "subtypes": []},
+            {"name": "Weak Sacrifice", "text": "Sacrifice this creature: Draw a card.",
+             "types": ["Creature"], "subtypes": []},
+            {"name": "Off Theme", "text": "Flying", "types": ["Creature"], "subtypes": []},
+            {"name": "Needed Ramp", "text": "{T}: Add {G}.",
+             "types": ["Artifact"], "subtypes": []},
+        ]
+        suggestion = {"name": "Table Replacement", "oracle_text":
+                      "Whenever another creature dies, each opponent loses 1 life.",
+                      "_theme_matches": 2}
+        cuts = decktool.cut_candidates(
+            cards, [suggestion], {"Sacrifice / aristocrats"}, None,
+            ["Commander"], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 0, "Card draw": 10,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        self.assertEqual([cut["name"] for cut in cuts], ["Off Theme", "Weak Sacrifice"])
+
+    def test_cut_candidates_require_theme_confidence(self):
+        cards = [{"name": "Off Theme", "text": "Flying",
+                  "types": ["Creature"], "subtypes": []}]
+        suggestion = {"name": "Table Replacement", "oracle_text":
+                      "Each opponent loses 1 life.", "_theme_matches": 2}
+        self.assertEqual(
+            decktool.cut_candidates(cards, [suggestion], set(), None, [], self.taxonomy), [])
+
+    def test_print_cut_candidates_shows_review_reasons_and_replacement(self):
+        cut = {
+            "name": "Off Theme", "reasons": ["no active-theme evidence", "no multiplayer impact"],
+            "replacement": {"name": "Table Replacement", "oracle_text":
+                            "Each opponent loses 1 life."},
+        }
+        with patch("builtins.print") as printed:
+            decktool.print_cut_candidates([cut], self.taxonomy)
+        output = "\n".join(" ".join(map(str, call.args)) for call in printed.call_args_list)
+        self.assertIn("Potential cuts to review", output)
+        self.assertIn("Off Theme", output)
+        self.assertIn("Table Replacement", output)
+        self.assertIn("review aid", output)
+
+    def test_print_themes_includes_cut_review_from_returned_suggestions(self):
+        cards = [{"name": "Off Theme", "text": "Flying",
+                  "types": ["Creature"], "subtypes": []}]
+        suggestion = {"name": "Table Replacement", "oracle_text":
+                      "Whenever another creature dies, each opponent loses 1 life."}
+        with patch("decktool.detect_themes", return_value=(
+                [("Sacrifice / aristocrats", ["Theme Card"], False)], None)), \
+             patch("decktool.commander_identity", return_value="B"), \
+             patch("decktool.suggestion_cards", return_value=[suggestion]), \
+             patch("builtins.print") as printed:
+            decktool.print_themes("Test Deck", [], {"Off Theme": 1}, cards, 20)
+        output = "\n".join(" ".join(map(str, call.args)) for call in printed.call_args_list)
+        self.assertIn("Potential cuts to review", output)
+        self.assertIn("Off Theme", output)
+
     def test_each_opponent_effect_outranks_target_opponent(self):
         target = {"name": "Target Drain", "oracle_text": "Target opponent loses 1 life."}
         table = {"name": "Table Drain", "oracle_text": "Each opponent loses 1 life."}
