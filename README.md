@@ -53,10 +53,12 @@ analysis continues. Functional roles may overlap: for example, a mana rock that
 also draws a card can count as both Ramp and Card draw.
 Potential cuts are review aids, not mandatory replacements. The tool protects
 commanders, lands, under-target baseline roles, active tribal cards, strong
-theme evidence, and meaningful table-wide multiplayer effects. It does not
-rank cards by mana value in this version. When a commander can blink nonland
-permanents, the tool also protects ETB cards and artifact ramp that the commander
-can reset, such as Basalt Monolith in a Brago deck.
+theme evidence, and meaningful table-wide multiplayer effects. It does not rank
+cards by mana value alone. A high-cost, color-intensive, one-shot graveyard
+payoff can still receive a review prompt when the deck has overlapping graveyard
+recovery access. When a commander can blink nonland permanents, the tool also
+protects ETB cards and artifact ramp that the commander can reset, such as
+Basalt Monolith in a Brago deck.
 Lands-matter evidence includes cards that sacrifice lands for recurring value.
 The review also retains cards that cover at least two core roles, such as
 repeatable Treasure ramp plus card draw. These are safeguards, not claims that

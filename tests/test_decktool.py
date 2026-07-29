@@ -204,6 +204,29 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual(decktool.card_roles(farseek), ["Ramp"])
         self.assertEqual(cuts, [])
 
+    def test_high_commitment_graveyard_payoff_with_recovery_overlap_is_reviewable(self):
+        eerie_ultimatum = {
+            "name": "Eerie Ultimatum", "types": ["Sorcery"], "subtypes": [],
+            "mana_value": 7, "mana_cost": "{W}{W}{B}{B}{B}{G}{G}",
+            "text": "Return any number of permanent cards with different names from your graveyard to the battlefield.",
+        }
+        cards = [
+            eerie_ultimatum,
+            {"name": "Recurring Recovery", "types": ["Enchantment"], "subtypes": [],
+             "mana_value": 4, "text": "You may play lands from your graveyard."},
+            {"name": "Direct Recovery", "types": ["Sorcery"], "subtypes": [],
+             "mana_value": 3, "text": "Return target permanent card from your graveyard to the battlefield."},
+        ]
+        cuts = decktool.cut_candidates(
+            cards, [], {"Graveyard / reanimator"}, None, [], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 10, "Card draw": 10,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        eerie = next(cut for cut in cuts if cut["name"] == "Eerie Ultimatum")
+        self.assertIn("strong active-theme evidence", eerie["reasons"])
+        self.assertIn("high mana and color commitment", eerie["reasons"])
+        self.assertIn("one-shot graveyard recovery overlaps other deck access", eerie["reasons"])
+
     def test_blink_oracle_wording_marks_brago_and_etb_cards_as_theme_support(self):
         brago = {"name": "Brago, King Eternal", "types": ["Legendary", "Creature"],
                  "subtypes": ["Spirit"], "text": "Whenever Brago deals combat damage to a player, exile any number of target nonland permanents you control, then return those cards to the battlefield under their owner's control."}

@@ -32,7 +32,14 @@
     },
     "minimum_replacement_delta": 2,
     "weak_theme_minimum_replacement_delta": 4,
-    "meaningful_multiplayer_impact": 3
+    "meaningful_multiplayer_impact": 3,
+    "high_commitment_graveyard_review": {
+      "minimum_mana_value": 6,
+      "minimum_colored_pips": 6,
+      "minimum_distinct_colors": 3,
+      "minimum_recovery_overlap": 2,
+      "review_risk": 4
+    }
   },
   "themes": {
     "Sacrifice / aristocrats": {
