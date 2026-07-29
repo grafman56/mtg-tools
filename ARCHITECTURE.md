@@ -188,9 +188,12 @@ checks through the whole codebase is how you get bugs.
 The one-card-away list is not sorted by combo count. It is sorted by "which
 single purchase unlocks the most *finite, game-ending* combos," then by finite
 combo count, then by popularity. That ordering is the actual advice: spend one
-card to close the most games. Suggestions elsewhere are ordered by EDHREC
-popularity, which is a proxy for "cards that actually work with this commander"
-rather than random legal matches.
+card to close the most games. Theme suggestions first favor cards that satisfy
+multiple active queries. Tied cards then favor broader multiplayer reach, such
+as "each opponent" over "target opponent," and repeatable triggers over one-shot
+effects. Scryfall's EDHREC order remains the final tie-breaker, which favors
+cards that people actually play with the commander rather than random legal
+matches.
 
 **General lesson:** a sort key is an opinion about what matters. Write the opinion
 down (in a comment, in the docs) so the next person understands the advice the

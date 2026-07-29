@@ -4,6 +4,20 @@
   "weights": { "strong": 2, "weak": 1, "commander_bonus": 3 },
   "min_strong": 2,
   "max_themes": 3,
+  "impact": {
+    "scope": [
+      { "name": "each opponent", "pattern": "\\beach opponent\\b", "weight": 3.0 },
+      { "name": "each other player", "pattern": "\\beach other player\\b", "weight": 3.0 },
+      { "name": "each player", "pattern": "\\beach player\\b", "weight": 2.0 },
+      { "name": "target opponent", "pattern": "\\btarget opponent\\b", "weight": 1.0 },
+      { "name": "target player", "pattern": "\\btarget player\\b", "weight": 0.8 }
+    ],
+    "delivery": [
+      { "name": "repeatable trigger", "pattern": "\\bwhenever\\b|\\beach time\\b", "weight": 1.25 },
+      { "name": "recurring step trigger", "pattern": "\\bat the beginning of\\b", "weight": 1.15 },
+      { "name": "ETB trigger", "pattern": "\\benters the battlefield\\b", "weight": 1.1 }
+    ]
+  },
   "max_theme_suggestions": 8,
   "themes": {
     "Sacrifice / aristocrats": {

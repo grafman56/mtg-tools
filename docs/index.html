@@ -389,7 +389,16 @@ function detectThemesJs(cardObjs, tax, cmdrCard, goalText, forced, tagIndex = {}
   return { ranked, tribal };
 }
 
-async function themeSuggestions(queries, ident, maxPrice, deckSet, limit = 8) {
+function impactForCard(card, tax) {
+  const text = oracleOf(card);
+  const scope = (tax.impact?.scope || []).find(rule => new RegExp(rule.pattern, "i").test(text));
+  if (!scope) return { score: 0, scope: null, delivery: null };
+  const delivery = (tax.impact?.delivery || []).find(rule => new RegExp(rule.pattern, "i").test(text))
+    || { name: "one-shot effect", weight: 1 };
+  return { score: scope.weight * delivery.weight, scope: scope.name, delivery: delivery.name };
+}
+
+async function themeSuggestions(queries, ident, maxPrice, deckSet, tax, limit = 8) {
   const candidates = new Map();
   for (const q of queries) {
     const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
@@ -403,7 +412,9 @@ async function themeSuggestions(queries, ident, maxPrice, deckSet, limit = 8) {
     await sleep(120);
   }
   return [...candidates.values()]
-    .sort((a, b) => b.matches - a.matches || a.order - b.order)
+    .sort((a, b) => b.matches - a.matches
+      || impactForCard(b.card, tax).score - impactForCard(a.card, tax).score
+      || a.order - b.order)
     .slice(0, limit)
     .map(c => c.card);
 }
@@ -412,9 +423,12 @@ function finisherCardHtml(c) {
   const text = oracleOf(c).split("\n").find(l => GAME_ENDING.test(l))
                || oracleOf(c).split("\n")[0] || "";
   const price = c.prices && c.prices.usd ? ` · $${c.prices.usd}` : "";
+  const impact = impactForCard(c, THEMES);
+  const impactText = impact.score
+    ? `<br>Multiplayer impact: ${esc(impact.scope)}; ${esc(impact.delivery)}` : "";
   return `<div class="finisher"><div class="name"><a href="${c.scryfall_uri}" target="_blank">${esc(c.name)}</a><br>
           <span class="text">${esc(c.mana_cost || "")}${price}</span></div>
-          <div class="text">${esc(text.slice(0, 220))}</div></div>`;
+          <div class="text">${esc(text.slice(0, 220))}${impactText}</div></div>`;
 }
 
 // ------------------------------------------------------------- EDHREC
@@ -599,7 +613,7 @@ async function analyze() {
         if (!active.has(a) || !active.has(b)) continue;
         status(`Theme combo: ${spec.label}…`);
         const sugg = await themeSuggestions(spec.payoffs, ident, maxPrice, deckSet,
-                                             tax.max_theme_suggestions || 8);
+                                             tax, tax.max_theme_suggestions || 8);
         th += `<div class="pill-row"><b>${esc(spec.label)}</b>
                <span class="pill">both themes present</span></div>`;
         th += sugg.map(finisherCardHtml).join("");
@@ -608,7 +622,7 @@ async function analyze() {
       for (const [theme, matched, queries, cmdrHit, isGoal] of jobs) {
         status(`Theme payoffs: ${theme}…`);
         const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet,
-                                             tax.max_theme_suggestions || 8);
+                                             tax, tax.max_theme_suggestions || 8);
         const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
           + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");
         th += `<div class="pill-row"><b>${esc(theme)}</b>${tags}
@@ -684,16 +698,21 @@ async function analyze() {
     for (const [bucket, q] of Object.entries(FINISHER_BUCKETS)) {
       status(`Searching finishers: ${bucket}…`);
       const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
-      const fresh = cards.filter(c => !deckSet.has(front(c.name).toLowerCase())).slice(0, 6);
+      const fresh = cards.filter(c => !deckSet.has(front(c.name).toLowerCase()))
+        .sort((a, b) => impactForCard(b, tax).score - impactForCard(a, tax).score)
+        .slice(0, 6);
       fh += `<div class="pill-row"><b>${bucket}</b></div>`;
       if (!fresh.length) fh += `<div class="hint">nothing new in identity/budget</div>`;
       for (const c of fresh) {
         const text = oracleOf(c).split("\n").find(l => GAME_ENDING.test(l) || /win the game/i.test(l))
                      || oracleOf(c).split("\n")[0] || "";
         const price = c.prices && c.prices.usd ? ` · $${c.prices.usd}` : "";
+        const impact = impactForCard(c, tax);
+        const impactText = impact.score
+          ? `<br>Multiplayer impact: ${esc(impact.scope)}; ${esc(impact.delivery)}` : "";
         fh += `<div class="finisher"><div class="name"><a href="${c.scryfall_uri}" target="_blank">${esc(c.name)}</a><br>
                <span class="text">${esc(c.mana_cost || "")}${price}</span></div>
-               <div class="text">${esc(text.slice(0, 220))}</div></div>`;
+               <div class="text">${esc(text.slice(0, 220))}${impactText}</div></div>`;
       }
       $("finishers").innerHTML = fh;
       await sleep(120);
