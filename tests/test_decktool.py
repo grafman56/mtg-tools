@@ -130,6 +130,49 @@ class RecommendationTests(unittest.TestCase):
     def test_default_max_price_is_100(self):
         self.assertEqual(decktool.DEFAULT_MAX_PRICE, 100.0)
 
+    def test_blink_oracle_wording_marks_brago_and_etb_cards_as_theme_support(self):
+        brago = {"name": "Brago, King Eternal", "types": ["Legendary", "Creature"],
+                 "subtypes": ["Spirit"], "text": "Whenever Brago deals combat damage to a player, exile any number of target nonland permanents you control, then return those cards to the battlefield under their owner's control."}
+        channeler = {"name": "Aether Channeler", "types": ["Creature"], "subtypes": [],
+                     "text": "When this creature enters, choose one — Draw a card."}
+        cloud = {"name": "Cloud of Faeries", "types": ["Creature"], "subtypes": [],
+                 "text": "When this creature enters, untap up to two lands."}
+        self.assertEqual(decktool.theme_evidence_for_card(
+            brago, "Blink / ETB value", self.taxonomy), "strong")
+        self.assertEqual(decktool.theme_evidence_for_card(
+            channeler, "Blink / ETB value", self.taxonomy), "weak")
+        self.assertEqual(decktool.theme_evidence_for_card(
+            cloud, "Blink / ETB value", self.taxonomy), "weak")
+
+    def test_blink_commander_protects_etb_and_artifact_ramp_from_cuts(self):
+        cards = [
+            {"name": "Brago, King Eternal", "types": ["Legendary", "Creature"],
+             "subtypes": ["Spirit"], "text": "Whenever Brago deals combat damage to a player, exile any number of target nonland permanents you control, then return those cards to the battlefield under their owner's control."},
+            {"name": "Aether Channeler", "types": ["Creature"], "subtypes": [],
+             "text": "When this creature enters, choose one — Draw a card."},
+            {"name": "Arcane Signet", "types": ["Artifact"], "subtypes": [],
+             "text": "{T}: Add one mana of any color in your commander's color identity."},
+            {"name": "Basalt Monolith", "types": ["Artifact"], "subtypes": [],
+             "text": "This artifact doesn't untap during your untap step. {T}: Add {C}{C}{C}. {3}: Untap this artifact."},
+            {"name": "Cloud of Faeries", "types": ["Creature"], "subtypes": [],
+             "text": "When this creature enters, untap up to two lands."},
+            {"name": "Off Theme", "types": ["Creature"], "subtypes": [], "text": "Flying"},
+        ]
+        suggestions = [
+            {"name": "Psychosis Crawler", "_theme_matches": 2,
+             "oracle_text": "Whenever you draw a card, each opponent loses 1 life."},
+            {"name": "Blink Payoff", "_theme_matches": 2,
+             "oracle_text": "Whenever a creature enters, each opponent loses 1 life."},
+        ]
+        cuts = decktool.cut_candidates(
+            cards, suggestions, {"Blink / ETB value"}, None,
+            ["Brago, King Eternal"], self.taxonomy,
+            role_counts={"Lands": 37, "Ramp": 12, "Card draw": 12,
+                         "Interaction": 10, "Board wipes": 3}, scale=1,
+        )
+        self.assertEqual([cut["name"] for cut in cuts], ["Off Theme"])
+        self.assertEqual(cuts[0]["replacement"]["name"], "Blink Payoff")
+
     def test_cut_candidates_keep_strong_theme_and_protected_roles(self):
         cards = [
             {"name": "Commander", "text": "Sacrifice another creature: Draw a card.",

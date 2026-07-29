@@ -207,6 +207,12 @@ review aid because Oracle-text heuristics cannot prove that a card is bad in a
 specific deck. Mana value stays out of this comparison until the tool has deck
 curve and effect-size context.
 
+Commander context can strengthen this protection. A commander that can blink
+nonland permanents makes ETB cards and artifact ramp deck-specific resources.
+The cut review protects those cards rather than treating them as generic surplus.
+Incoming replacements must also show active-theme or tribal evidence, so a card
+such as Psychosis Crawler cannot become a generic replacement in a blink deck.
+
 ## 10. Zero-backend, static hosting
 
 Deck Forge is one self-contained HTML file with its CSS and JS inline. GitHub

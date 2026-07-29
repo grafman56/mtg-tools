@@ -246,10 +246,20 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
     scale = scale if scale is not None else min(1, sum(c.get("qty", 1) for c in cards) / 99)
     commander_keys = {front(name).lower() for name in commanders}
     tribal_type = tribal[0] if tribal else None
+    blink_theme = "Blink / ETB value" in active_themes
+    blink_commander = blink_theme and any(
+        front(card["name"]).lower() in commander_keys
+        and theme_evidence_for_card(card, "Blink / ETB value", taxonomy, tag_index) == "strong"
+        and "nonland permanent" in oracle_text(card).lower()
+        for card in cards)
 
     def suggestion_score(card):
         return card.get("_theme_matches", 1) * 3 + impact_for_card(card, taxonomy)["score"]
 
+    suggestions = [suggestion for suggestion in suggestions if any(
+        theme_evidence_for_card(suggestion, theme, taxonomy, tag_index)
+        for theme in active_themes) or (
+            tribal_type and tribal_type in suggestion.get("subtypes", []))]
     if not suggestions:
         return []
     replacement = max(suggestions, key=suggestion_score)
@@ -262,12 +272,18 @@ def cut_candidates(cards, suggestions, active_themes, tribal, commanders, taxono
         roles = card_roles(card)
         if "Lands" in roles:
             continue
+        types = card.get("types") or re.split(
+            r"\s+", (card.get("type_line") or "").split("—")[0])
+        if blink_commander and "Ramp" in roles and "Artifact" in types:
+            continue
         protected = [role for role in roles if role in ROLE_TARGETS
                      and role_counts.get(role, 0) < round(ROLE_TARGETS[role] * scale)]
         if protected:
             continue
         evidence = [theme_evidence_for_card(card, theme, taxonomy, tag_index)
                     for theme in active_themes]
+        if blink_commander and evidence.count("weak"):
+            evidence = ["strong" if value == "weak" else value for value in evidence]
         if "strong" in evidence:
             continue
         if tribal_type and tribal_type in card.get("subtypes", []):
