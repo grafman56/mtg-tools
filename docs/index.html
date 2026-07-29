@@ -398,6 +398,26 @@ function impactForCard(card, tax) {
   return { score: scope.weight * delivery.weight, scope: scope.name, delivery: delivery.name };
 }
 
+function contextualStrengthForCard(card, tax, themeMatches = 0, tagIndex = {}) {
+  const impact = impactForCard(card, tax);
+  const strength = tax.strength || {};
+  const allowedTags = new Set((strength.oracle_tags || []).map(rule => rule.factor));
+  const tagFactors = (tagIndex[front(card.name).toLowerCase()] || [])
+    .filter(factor => allowedTags.has(factor))
+    .slice(0, strength.maximum_oracle_tag_factors ?? 2);
+  const score = impact.score + themeMatches * (strength.theme_match_bonus ?? 0.5)
+    + tagFactors.length * (strength.oracle_tag_bonus ?? 0.35);
+  const factors = [impact.scope, impact.delivery].filter(Boolean);
+  factors.push(...tagFactors);
+  if (themeMatches) factors.push("theme fit");
+  const bands = strength.bands || [
+    { name: "strong", minimum: 3 },
+    { name: "situational", minimum: 1 },
+    { name: "limited", minimum: 0 },
+  ];
+  return { score, band: bands.find(rule => score >= rule.minimum).name, factors, impact };
+}
+
 function themeEvidenceForCard(card, theme, tax, tagIndex) {
   const spec = tax.themes[theme], text = oracleOf(card);
   if ((tagIndex[front(card.name).toLowerCase()] || []).includes(theme)) return "strong";
@@ -496,7 +516,7 @@ function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts,
     .slice(0, policy.max_results);
 }
 
-async function themeSuggestions(queries, ident, maxPrice, deckSet, tax, limit = 8) {
+async function themeSuggestions(queries, ident, maxPrice, deckSet, tax, tagIndex, limit = 8) {
   const candidates = new Map();
   for (const q of queries) {
     const cards = await scryfallSearch(`(${q}) id<=${ident} legal:commander usd<=${maxPrice}`);
@@ -510,9 +530,11 @@ async function themeSuggestions(queries, ident, maxPrice, deckSet, tax, limit = 
     await sleep(120);
   }
   return [...candidates.values()]
-    .sort((a, b) => b.matches - a.matches
-      || impactForCard(b.card, tax).score - impactForCard(a.card, tax).score
-      || a.order - b.order)
+    .sort((a, b) => {
+      const strengthA = contextualStrengthForCard(a.card, tax, a.matches, tagIndex).score;
+      const strengthB = contextualStrengthForCard(b.card, tax, b.matches, tagIndex).score;
+      return strengthB - strengthA || a.order - b.order;
+    })
     .slice(0, limit)
     .map(c => ({ ...c.card, _themeMatches: c.matches }));
 }
@@ -712,7 +734,7 @@ async function analyze() {
         if (!active.has(a) || !active.has(b)) continue;
         status(`Theme combo: ${spec.label}…`);
         const sugg = await themeSuggestions(spec.payoffs, ident, maxPrice, deckSet,
-                                             tax, tax.max_theme_suggestions || 8);
+                                             tax, tagIndex, tax.max_theme_suggestions || 8);
         allThemeSuggestions.push(...sugg);
         th += `<div class="pill-row"><b>${esc(spec.label)}</b>
                <span class="pill">both themes present</span></div>`;
@@ -722,7 +744,7 @@ async function analyze() {
       for (const [theme, matched, queries, cmdrHit, isGoal] of jobs) {
         status(`Theme payoffs: ${theme}…`);
         const sugg = await themeSuggestions(queries, ident, maxPrice, deckSet,
-                                             tax, tax.max_theme_suggestions || 8);
+                                             tax, tagIndex, tax.max_theme_suggestions || 8);
         allThemeSuggestions.push(...sugg);
         const tags = (isGoal ? '<span class="tag ends">your goal</span>' : "")
           + (cmdrHit ? '<span class="tag finite">commander theme</span>' : "");

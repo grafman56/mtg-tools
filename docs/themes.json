@@ -18,6 +18,24 @@
       { "name": "ETB trigger", "pattern": "\\benters the battlefield\\b", "weight": 1.1 }
     ]
   },
+  "strength": {
+    "comment": "Theme-query matches are a bounded preference. They refine equal-role suggestions but cannot outweigh a materially broader multiplayer payoff.",
+    "theme_match_bonus": 0.5,
+    "oracle_tag_bonus": 0.35,
+    "maximum_oracle_tag_factors": 2,
+    "oracle_tags": [
+      { "tag": "ramp", "factor": "Ramp role" },
+      { "tag": "draw", "factor": "Card draw role" },
+      { "tag": "removal", "factor": "Interaction role" },
+      { "tag": "board-wipe", "factor": "Board wipe role" },
+      { "tag": "recursion", "factor": "Recurring value" }
+    ],
+    "bands": [
+      { "name": "strong", "minimum": 3 },
+      { "name": "situational", "minimum": 1 },
+      { "name": "limited", "minimum": 0 }
+    ]
+  },
   "max_theme_suggestions": 8,
   "cut_candidates": {
     "max_results": 8,
