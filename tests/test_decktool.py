@@ -127,6 +127,9 @@ class RecommendationTests(unittest.TestCase):
         self.assertGreater(policy["weak_theme_minimum_replacement_delta"],
                            policy["minimum_replacement_delta"])
 
+    def test_default_max_price_is_100(self):
+        self.assertEqual(decktool.DEFAULT_MAX_PRICE, 100.0)
+
     def test_cut_candidates_keep_strong_theme_and_protected_roles(self):
         cards = [
             {"name": "Commander", "text": "Sacrifice another creature: Draw a card.",

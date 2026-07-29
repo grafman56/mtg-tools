@@ -36,7 +36,7 @@ python decktool.py themes     <deck>   # dominant themes + payoffs keyed to them
 header).
 
 Flags: `--show-infinite` (infinite combos are collapsed by default),
-`--max-price N` (default $20), `--json` (raw report for piping).
+`--max-price N` (default $100), `--json` (raw report for piping).
 
 ### Web app (`docs/index.html`)
 

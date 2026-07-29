@@ -99,7 +99,7 @@ Blood Artist
       <div id="themeChecks" class="checkline"></div>
     </details>
     <div class="row">
-      <div><label>Max card price ($)</label><input type="number" id="maxprice" value="20"></div>
+      <div><label>Max card price ($)</label><input type="number" id="maxprice" value="100"></div>
       <div><label>&nbsp;</label>
         <div class="checkline"><input type="checkbox" id="showinf"> show infinite combos</div>
       </div>
@@ -411,7 +411,13 @@ function themeEvidenceForCard(card, theme, tax, tagIndex) {
 
 function cutCandidatesWeb(cards, suggestions, active, tribal, commander, counts, scale, tax, tagIndex) {
   if ((!active || !active.size) && !tribal || !suggestions.length) return [];
-  const policy = tax.cut_candidates, targets = BASELINE;
+  const policy = tax.cut_candidates || {
+    max_results: 5,
+    keep_weights: { active_theme_weak: 1 },
+    minimum_replacement_delta: 2,
+    weak_theme_minimum_replacement_delta: 4,
+    meaningful_multiplayer_impact: 3,
+  }, targets = BASELINE;
   const score = card => (card._themeMatches || 1) * 3 + impactForCard(card, tax).score;
   const replacement = suggestions.reduce((best, card) => score(card) > score(best) ? card : best);
   const commanderKey = commander && front(commander.name).toLowerCase();
@@ -535,7 +541,7 @@ async function analyze() {
       $("commander").value = parsed.commanders[0];
     }
     const commander = $("commander").value.trim();
-    const maxPrice = +$("maxprice").value || 20;
+    const maxPrice = +$("maxprice").value || 100;
     const showInf = $("showinf").checked;
 
     const allNames = entries.map(e => e.name);
